@@ -1,10 +1,84 @@
-分数の大小（超入門版） ブラウザだけで動作
-問題を作成中…
-(>, <, = のいずれかで答えてください。全角の「＞」「＜」でもOK)
-答えを入力
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>分数の大小（API接続版）</title>
+  <style>
+    body{font-family: system-ui; max-width:760px; margin:24px auto; padding:0 16px; line-height:1.7}
+    .card{border:1px solid #e5e7eb; border-radius:14px; padding:16px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.04); margin:12px 0}
+    button{padding:10px 16px; border-radius:12px; border:1px solid #d1d5db; background:#111827; color:#fff; cursor:pointer}
+    button.secondary{background:#fff; color:#111}
+    .ok{color:#10b981; font-weight:700} .ng{color:#ef4444; font-weight:700}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace}
+  </style>
+</head>
+<body>
+  <h1>分数の大小（API接続版）</h1>
 
-採点 次の問題 履歴リセット
+  <div class="card">
+    <div id="question" class="mono">問題を取得中…</div>
+    <div class="help">(>, &lt;, = のいずれかで答えてください。全角の「＞」「＜」でもOK)</div>
+  </div>
 
-学習記録（この端末だけに保存）
-	•	
-※ ブラウザの「ローカルストレージ」に保存しています。別の端末・別のブラウザでは共有されません。
+  <div class="card">
+    <label>答え（>, <, =）</label>
+    <input id="answer" placeholder=", 例: > または ＝" />
+    <div style="margin-top:12px">
+      <button id="submit">採点</button>
+      <button id="next" class="secondary">次の問題</button>
+    </div>
+    <div id="result" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card"><h3>学習記録</h3><ul id="log"></ul></div>
+
+<script>
+const API = 'https://nlt-proto.onrender.com/api/v1'; // ← あなたのRender URLに合わせる
+
+let current = null;
+function normalize(s){return (s||'').trim().replace('＞','>').replace('＜','<');}
+
+async function fetchNext(){
+  const res = await fetch(`${API}/problems/next`);
+  current = await res.json();
+  document.getElementById('question').textContent = current.render.stem;
+  document.getElementById('answer').value = '';
+  document.getElementById('result').textContent = '';
+  current._start = Date.now();
+}
+
+async function grade(){
+  const given = normalize(document.getElementById('answer').value);
+  const res = await fetch(`${API}/attempts/grade`,{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ answer: given, payload: current.payload })
+  });
+  const out = await res.json();
+  const ms = Date.now()-current._start;
+  document.getElementById('result').innerHTML = out.correct
+    ? `<span class="ok">正解！</span> (${ms}ms)`
+    : `<span class="ng">不正解…</span> 正しくは <b>${out.ground_truth}</b>。<br>${out.feedback_short}`;
+  saveLog(out.correct, ms, current.render.stem);
+  renderLog();
+}
+
+function saveLog(ok, ms, stem){
+  const rec = { ts:new Date().toISOString(), ok, ms, stem };
+  const arr = JSON.parse(localStorage.getItem('attempts')||'[]');
+  arr.unshift(rec); localStorage.setItem('attempts', JSON.stringify(arr.slice(0,50)));
+}
+function renderLog(){
+  const arr = JSON.parse(localStorage.getItem('attempts')||'[]');
+  const ul = document.getElementById('log'); ul.innerHTML='';
+  arr.forEach(x=>{ const li=document.createElement('li'); li.textContent = `${x.ok?'◯':'×'}  ${x.ms}ms  /  ${x.stem}`; ul.appendChild(li); });
+}
+
+addEventListener('DOMContentLoaded', ()=>{
+  document.getElementById('submit').onclick = grade;
+  document.getElementById('next').onclick = fetchNext;
+  fetchNext(); renderLog();
+});
+</script>
+</body>
+</html>
