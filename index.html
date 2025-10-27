@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>超入門版：分数の大小（出題→採点→記録）</title>
+  <style>
+    :root{--gap:14px}
+    *{box-sizing:border-box}
+    body{font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans JP", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif; 
+         max-width: 760px; margin: 24px auto; padding: 0 16px; line-height: 1.7;}
+    h1{font-size: clamp(20px, 4vw, 26px)}
+    .row{display:flex; gap: var(--gap); flex-wrap: wrap}
+    .card{border:1px solid #e5e7eb; border-radius:14px; padding:16px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.04); margin: 12px 0}
+    label{display:block; font-weight:600; margin-bottom:8px}
+    input[type="text"]{width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; font-size:16px}
+    button{padding:10px 16px; border-radius:12px; border:1px solid #d1d5db; background:#111827; color:#fff; cursor:pointer}
+    button.secondary{background:#fff; color:#111;}
+    button + button{margin-left:8px}
+    .muted{color:#6b7280}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+    .ok{color:#10b981; font-weight:700}
+    .ng{color:#ef4444; font-weight:700}
+    ul{padding-left:18px}
+    .help{font-size: 14px; color:#4b5563}
+    .badge{display:inline-block; padding:2px 8px; border-radius:999px; background:#f3f4f6; font-size:12px; margin-left:6px}
+  </style>
+</head>
+<body>
+  <h1>分数の大小（超入門版） <span class="badge">ブラウザだけで動作</span></h1>
+
+  <!-- 出題エリア -->
+  <div class="card">
+    <div id="question" class="mono">問題を作成中…</div>
+    <div class="help">(>, &lt;, = のいずれかで答えてください。全角の「＞」「＜」でもOK)</div>
+  </div>
+
+  <!-- 解答入力とボタン群 -->
+  <div class="card">
+    <label for="answer">答えを入力</label>
+    <div class="row">
+      <input id="answer" type="text" inputmode="text" placeholder=",例: >  または  ＜  または  =" autocomplete="off" />
+    </div>
+    <div style="margin-top:12px">
+      <button id="submit">採点</button>
+      <button id="next" class="secondary">次の問題</button>
+      <button id="reset" class="secondary" title="履歴を消します">履歴リセット</button>
+    </div>
+    <div id="result" style="margin-top:10px"></div>
+  </div>
+
+  <!-- 学習記録（この端末だけ） -->
+  <div class="card">
+    <h3 style="margin-top:0">学習記録（この端末だけに保存）</h3>
+    <ul id="log"></ul>
+    <div class="help">※ ブラウザの「ローカルストレージ」に保存しています。別の端末・別のブラウザでは共有されません。</div>
+  </div>
+
+<script>
+// ---------------------------------------------
+// 1) 乱数でパラメータ生成（A/B と C/D）
+// ---------------------------------------------
+const state = { A:0,B:0,C:0,D:0, start:0 };
+
+function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+
+function newQuestion(){
+  // 0や1/1のように trivially 等しいケースを避けつつ、簡単すぎない範囲で生成
+  state.A = randInt(1,9);
+  state.B = randInt(2,9);
+  state.C = randInt(1,9);
+  state.D = randInt(2,9);
+  // たまに同値になるのも学習上は有用なので完全排除はしない
+
+  document.getElementById('question').textContent =
+    `次の分数を通分して (>, <, =) で答えよ：  ${state.A}/${state.B}  と  ${state.C}/${state.D}`;
+  document.getElementById('answer').value = "";
+  document.getElementById('result').textContent = "";
+  state.start = Date.now();
+}
+
+// ---------------------------------------------
+// 2) 厳密採点（AIに頼らず、プログラムで正解を計算）
+// ---------------------------------------------
+function compareFractions(A,B,C,D){
+  const left = A*D;
+  const right = C*B;
+  if (left>right) return ">";
+  if (left<right) return "<";
+  return "=";
+}
+
+function normalize(s){
+  return (s||"")
+    .trim()
+    .replaceAll('\u3000',' ') // 全角空白→半角
+    .replace('＞','>')
+    .replace('＜','<');
+}
+
+// ---------------------------------------------
+// 3) 履歴の保存・表示（この端末だけ）
+// ---------------------------------------------
+function saveLog(ok, ms){
+  const rec = { ts: new Date().toISOString(), ok, ms,
+    q:`${state.A}/${state.B} ? ${state.C}/${state.D}` };
+  const arr = JSON.parse(localStorage.getItem("attempts")||"[]");
+  arr.unshift(rec);
+  localStorage.setItem("attempts", JSON.stringify(arr.slice(0,50))); // 最新50件だけ保持
+}
+
+function renderLog(){
+  const arr = JSON.parse(localStorage.getItem("attempts")||"[]");
+  const ul = document.getElementById('log'); ul.innerHTML = "";
+  if (arr.length===0){
+    const li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = 'まだ記録はありません。問題を解いてみましょう。';
+    ul.appendChild(li);
+    return;
+  }
+  arr.forEach(x=>{
+    const li = document.createElement('li');
+    const mark = x.ok ? '◯' : '×';
+    const cls = x.ok ? 'ok' : 'ng';
+    li.innerHTML = `<span class="${cls}">${mark}</span>  ${x.q}  / ${x.ms}ms  <span class="muted">${x.ts}</span>`;
+    ul.appendChild(li);
+  });
+}
+
+// ---------------------------------------------
+// 4) イベント：採点・次の問題・リセット
+// ---------------------------------------------
+function gradeNow(){
+  const given = normalize(document.getElementById('answer').value);
+  const gt = compareFractions(state.A,state.B,state.C,state.D);
+  const ms = Date.now()-state.start;
+  const ok = (given===gt);
+
+  const leftN = state.A*state.D, rightN = state.C*state.B; // 通分後の分子
+  const leftD = state.B*state.D, rightD = state.D*state.B; // 通分後の分母（同じ値）
+
+  document.getElementById('result').innerHTML = ok
+    ? `<span class="ok">正解！</span> (${ms}ms)`
+    : `<span class="ng">不正解…</span> 正しくは <b>${gt}</b>。<br>
+       通分すると  ${state.A}/${state.B} = ${leftN}/${leftD}、  ${state.C}/${state.D} = ${rightN}/${rightD} なので、
+       ${leftN}/${leftD}  <span class="mono">${gt}</span>  ${rightN}/${rightD} です。`;
+
+  saveLog(ok, ms);
+  renderLog();
+}
+
+// ボタン割り当て
+addEventListener('DOMContentLoaded', () => {
+  document.getElementById('submit').addEventListener('click', gradeNow);
+  document.getElementById('next').addEventListener('click', newQuestion);
+  document.getElementById('reset').addEventListener('click', ()=>{ localStorage.removeItem('attempts'); renderLog(); });
+  document.getElementById('answer').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ gradeNow(); }});
+
+  newQuestion();
+  renderLog();
+});
+</script>
+</body>
+</html>
