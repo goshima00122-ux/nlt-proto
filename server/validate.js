@@ -1,7 +1,29 @@
 // server/validate.js
 const Ajv = require('ajv');
-const ajv = new Ajv({ allErrors: true });
+// Ajv の警告を抑え、union 型を許可
+const ajv = new Ajv({ allErrors: true, allowUnionTypes: true, strict: false });
 
+// --- payload スキーマ（タイプ別） ---
+const fractionPayloadSchema = {
+  type: 'object',
+  properties: {
+    A: { type: 'integer' }, B: { type: 'integer' },
+    C: { type: 'integer' }, D: { type: 'integer' }
+  },
+  required: ['A','B','C','D'],
+  additionalProperties: false
+};
+
+const gcdPayloadSchema = {
+  type: 'object',
+  properties: {
+    X: { type: 'integer' }, Y: { type: 'integer' }
+  },
+  required: ['X','Y'],
+  additionalProperties: false
+};
+
+// --- 出題インスタンス全体 ---
 const instanceSchema = {
   type: 'object',
   properties: {
@@ -17,21 +39,22 @@ const instanceSchema = {
       additionalProperties: true
     },
     meta: { type: 'object' },
+    // ★ payload はタイプ別のどちらか
     payload: {
-      type: 'object',
-      properties: { A:{type:'integer'}, B:{type:'integer'}, C:{type:'integer'}, D:{type:'integer'} },
-      required: ['A','B','C','D']
+      oneOf: [ fractionPayloadSchema, gcdPayloadSchema ]
     }
   },
   required: ['instance_id','template_id','render','payload'],
   additionalProperties: true
 };
 
+// --- 採点入力 ---
 const gradeInputSchema = {
   type: 'object',
   properties: {
     answer: { type: ['string','number'] },
-    payload: instanceSchema.properties.payload
+    // ★ 採点側も同じ payload バリエーションを許可
+    payload: { oneOf: [ fractionPayloadSchema, gcdPayloadSchema ] }
   },
   required: ['answer','payload'],
   additionalProperties: false
