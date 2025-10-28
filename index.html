@@ -1,468 +1,420 @@
 <!doctype html>
 <html lang="ja">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>オンライン問題（試作・統合版）</title>
-<style>
-  :root { --gap:14px; }
-  *{ box-sizing:border-box }
-  body{
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans JP", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
-    max-width: 980px; margin: 24px auto; padding: 0 12px; line-height: 1.7;
-  }
-  h1{ font-size: clamp(22px,4vw,30px); margin:0 0 18px }
-  .row{ display:flex; gap:var(--gap); flex-wrap:wrap; align-items:center }
-  .card{ border:1px solid #e5e7eb; border-radius:14px; padding:16px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.03); margin:12px 0 }
-  label{ font-weight:600 }
-  input[type="text"], select{
-    padding:10px 12px; border-radius:12px; border:1px solid #d1d5db; background:#fff
-  }
-  button{
-    padding:10px 16px; border-radius:12px; border:1px solid #111827; background:#111827; color:#fff; font-weight:600; cursor:pointer
-  }
-  button.secondary{ background:#fff; color:#111; border-color:#d1d5db }
-  button.ghost{ background:#fff; color:#111; border-color:transparent }
-  .ok{ color:#059669; font-weight:700 }
-  .ng{ color:#ef4444; font-weight:700 }
-  .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace }
-  .muted{ color:#6b7280 }
-  .hint{ padding:10px; border:1px dashed #d1d5db; border-radius:12px; background:#fafafa }
-  .badge{ display:inline-block; padding:2px 8px; border-radius:999px; background:#f3f4f6; font-size:12px }
-  .flex-1{ flex:1 1 auto }
-  details summary{ cursor:pointer }
-  .sr{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0 }
-  table{ width:100%; border-collapse:collapse }
-  th,td{ padding:6px 8px; border-bottom:1px solid #e5e7eb; text-align:left }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>オンライン問題（試作）</title>
+  <style>
+    :root {
+      --gap: 14px;
+      --radius: 14px;
+      --ui: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans JP", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+      --mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Courier New", monospace;
+      --bg: #fff;
+      --fg: #111;
+      --muted: #667085;
+      --card: #fff;
+      --stroke: #e5e7eb;
+      --accent: #111827;
+      --accent-weak: #334155;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: var(--ui);
+      color: var(--fg);
+      background: var(--bg);
+      max-width: 960px;
+      margin: 24px auto;
+      padding: 0 16px 100px;
+      line-height: 1.6;
+    }
+    h1 { font-size: clamp(22px, 3vw, 28px); margin: 0 0 16px; }
+    .muted { color: var(--muted); }
+    .row { display: flex; gap: var(--gap); flex-wrap: wrap; align-items: center; }
+    .card {
+      border: 1px solid var(--stroke);
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    label { display:block; font-weight: 600; margin-bottom: 6px; }
+    input[type="text"]{
+      width: 100%;
+      height: 40px;
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      padding: 0 12px;
+      font-size: 16px;
+    }
+    select, button {
+      height: 40px;
+      border-radius: 10px;
+      border: 1px solid var(--stroke);
+      background: #fff;
+      padding: 0 12px;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    button.primary {
+      background: var(--accent);
+      color: #fff;
+      border: 1px solid var(--accent);
+    }
+    button.secondary {
+      background: #fff;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+    }
+    .badge { display:inline-block; padding: 2px 8px; border:1px solid #e5e7eb; border-radius: 999px; background:#f3f4f6; font-size:12px; }
+    .mono { font-family: var(--mono); }
+    .space-top { margin-top: 14px; }
+    .w-100 { width: 100%; }
+    .justify-between { display:flex; justify-content: space-between; align-items: center; }
+    .right { text-align:right; }
+    .hide { display:none !important; }
+
+    /* 下部バー（先生モード & プロフィール切替） */
+    .footer {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      background: #fff;
+      border-top: 1px solid var(--stroke);
+      box-shadow: 0 -4px 24px rgba(0,0,0,0.06);
+    }
+    .footer-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 12px 16px;
+      display: flex;
+      gap: var(--gap);
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+    .footer .row { gap: 8px; }
+
+    /* 学習記録カード */
+    #logCard .time { display: none; } /* デフォルトで時間(ms)は非表示 */
+    #logDetailToggle { cursor:pointer; color: var(--accent-weak); text-decoration: underline; }
+  </style>
 </head>
 <body>
+
   <h1>オンライン問題（試作）</h1>
 
-  <!-- プロフィール（同一ブラウザで複数人対応） -->
-  <div class="card" role="region" aria-label="プロフィール">
+  <!-- 学習者向け：単元・難易度・次の問題（最上段） -->
+  <div class="card">
     <div class="row">
-      <label for="profile" class="sr">プロフィール</label>
-      <select id="profile"></select>
-      <button id="createProfile" class="secondary">新規プロフィール</button>
-      <button id="renameProfile" class="ghost">名称変更</button>
-      <span class="badge" id="profileStats">—</span>
-      <div class="flex-1"></div>
-      <button id="fontUp" class="secondary" title="文字を大きく">A+</button>
-      <button id="fontDown" class="secondary" title="文字を小さく">A-</button>
-    </div>
-  </div>
-
-  <!-- 出題設定 -->
-  <div class="card" role="region" aria-label="出題設定">
-    <div class="row">
-      <label for="type">単元：</label>
-      <select id="type">
-        <option value="fraction_compare">分数の大小</option>
-        <option value="gcd">最大公約数</option>
-      </select>
-
-      <label for="level">難易度：</label>
-      <select id="level">
-        <option value="1">やさしい</option>
-        <option value="2" selected>ふつう</option>
-        <option value="3">むずかしい</option>
-      </select>
-
-      <button id="next" class="secondary">次の問題</button>
-      <div class="flex-1"></div>
-      <button id="ttsQ" class="ghost" title="問題を読み上げ">読み上げ（問題）</button>
-      <button id="ttsH" class="ghost" title="ヒントを読み上げ">読み上げ（ヒント）</button>
-      <button id="teacherMode" class="ghost" title="先生向けダッシュボード">先生モード</button>
+      <div>
+        <label>単元</label>
+        <select id="type">
+          <option value="fraction_compare">分数の大小</option>
+          <option value="gcd">最大公約数</option>
+        </select>
+      </div>
+      <div>
+        <label>難易度</label>
+        <select id="level">
+          <option value="1">やさしい</option>
+          <option value="2" selected>ふつう</option>
+          <option value="3">むずかしい</option>
+        </select>
+      </div>
+      <div style="margin-left:auto">
+        <label class="muted">　</label>
+        <button id="next" class="secondary">次の問題</button>
+      </div>
+      <div>
+        <label class="muted">学習記録</label>
+        <button id="toggleLog" class="secondary">表示</button>
+      </div>
     </div>
   </div>
 
   <!-- 問題 -->
-  <div id="qCard" class="card" role="region" aria-live="polite" aria-atomic="true">
-    <div id="question" class="mono">問題を取得中…</div>
-    <div id="helper" class="muted"></div>
+  <div class="card space-top">
+    <div class="row justify-between">
+      <div class="badge">問題</div>
+      <div class="muted mono" id="unitHint"></div>
+    </div>
+    <div id="question" style="margin-top:12px; font-size:18px;">問題を取得中…</div>
   </div>
 
-  <!-- 解答UI -->
-  <div class="card" role="region" aria-label="解答UI">
-    <div class="row">
-      <label for="answer">答え</label>
-      <input id="answer" type="text" placeholder="例：> / < / =（GCDは半角数字）"/>
-      <button id="submit">採点</button>
-    </div>
-
-    <div class="row" style="margin-top:8px; gap:8px;">
+  <!-- 答え -->
+  <div class="card space-top">
+    <label>答え</label>
+    <div class="row" id="cmpRow" style="gap:8px;">
       <button class="secondary" id="btn_gt" aria-label="＞で答える">&gt;</button>
       <button class="secondary" id="btn_lt" aria-label="＜で答える">&lt;</button>
       <button class="secondary" id="btn_eq" aria-label="＝で答える">=</button>
     </div>
 
-    <div class="row" style="margin-top:8px; gap:8px;">
-      <button id="hint" class="secondary">ヒント</button>
-      <button id="hint2" class="secondary">もう少しヒント</button>
-      <button id="easyJP" class="secondary">やさしい日本語</button>
+    <div class="row space-top">
+      <input id="answer" type="text" class="w-100" placeholder="例: > / < / =（分数の大小） または 例: 24 と 36 の最大公約数 を半角数字で" />
+      <button id="submit" class="primary">採点</button>
     </div>
-    <div id="hintBox" class="hint" style="margin-top:8px;"></div>
-    <div id="easyBox" class="hint" style="margin-top:8px;"></div>
 
-    <div id="result" style="margin-top:12px;"></div>
+    <div id="result" class="space-top"></div>
   </div>
 
-  <!-- 学習記録 -->
-  <div class="card" role="region" aria-label="学習記録">
-    <div class="row">
-      <h3 class="flex-1" style="margin:0">学習記録</h3>
-      <details>
-        <summary class="secondary" style="padding:6px 10px;">詳細（時間ms）を表示/非表示</summary>
-      </details>
+  <!-- 学習記録（トグルで表示/非表示） -->
+  <div id="logCard" class="card space-top hide">
+    <div class="justify-between">
+      <div class="badge">学習記録</div>
+      <div id="logDetailToggle">▶ 詳細（時間ms）を表示</div>
     </div>
-    <ul id="log" style="margin-top:8px; padding-left:18px;"></ul>
-    <div class="muted" id="acc">正答率：—</div>
+    <div id="log" class="mono" style="margin-top:8px;"></div>
+    <div class="muted" id="rate" style="margin-top:8px;">正答率：ー</div>
   </div>
 
-  <!-- 先生向けダッシュボード -->
-  <dialog id="dashDialog" style="max-width:900px; width:90%;">
-    <form method="dialog" style="margin:0">
-      <div class="row" style="align-items:center">
-        <h3 class="flex-1" style="margin:0">先生向けダッシュボード</h3>
-        <button class="secondary">閉じる</button>
-        <button id="exportCSV" class="secondary" type="button">CSVエクスポート</button>
+  <!-- 画面下部の先生モード＆プロフィール切替 -->
+  <div class="footer">
+    <div class="footer-inner">
+      <div class="row">
+        <label class="muted">プロフィール</label>
+        <select id="profile"></select>
+        <button id="newProfile" class="secondary">新規プロフィール</button>
+        <button id="renameProfile" class="secondary">名称変更</button>
       </div>
-      <div id="dashBody" style="margin-top:12px"></div>
-    </form>
-  </dialog>
+
+      <div class="row">
+        <label class="muted">モード</label>
+        <select id="mode">
+          <option value="student" selected>学習者</option>
+          <option value="teacher">先生</option>
+        </select>
+      </div>
+    </div>
+  </div>
 
 <script>
-/* ===== 設定 ===== */
-const API='https://nlt-proto.onrender.com/api/v1'; // ←あなたのAPIに合わせて
-let showDetail=false;           // 学習記録の時間(ms)はデフォルト非表示
-let current=null;
-let profiles={};
-let currentProfile='';
-let speakingHintText='';
+/** ============================
+ *  APIエンドポイント
+ *  ============================ */
+const API = 'https://nlt-proto.onrender.com/api/v1'; // ←必要ならあなたのRender URLに変更
 
-/* ===== プロフィール保存 ===== */
-function saveAll(){
-  localStorage.setItem('nlt_profiles', JSON.stringify(profiles));
-  localStorage.setItem('nlt_current_profile', currentProfile);
-}
-function noProfInit(){
-  if(!profiles || !Object.keys(profiles).length){
-    profiles={'学習者A':{logs:[],hintUses:0,correct:0,total:0}};
-    currentProfile='学習者A';
+/** ============================
+ *  状態
+ *  ============================ */
+let current = null;
+let speakingHintText = ''; // （読み上げ撤去したので未使用だが残骸があっても挙動に影響なし）
+const state = {
+  profileKey: 'learner_profiles_v1',
+  selectedProfile: '',
+  profiles: {},                // { profileName: { logs:[], correct:0, total:0 } }
+  showLog: false,
+  showMs: false
+};
+
+/** ============================
+ *  プロフィール（ローカル保存）
+ *  ============================ */
+function loadProfiles(){
+  const raw = localStorage.getItem(state.profileKey);
+  state.profiles = raw ? JSON.parse(raw) : {};
+  const names = Object.keys(state.profiles);
+  if (names.length === 0) {
+    state.profiles['学習者A'] = { logs:[], correct:0, total:0 };
+    state.selectedProfile = '学習者A';
+    saveProfiles();
+  } else {
+    state.selectedProfile = state.selectedProfile || names[0];
   }
-  if(!currentProfile) currentProfile=Object.keys(profiles)[0];
-  if(!profiles[currentProfile]) profiles[currentProfile]={logs:[],hintUses:0,correct:0,total:0};
+  renderProfileSelect();
 }
-function ensureProfile(){
-  if(!profiles[currentProfile]) profiles[currentProfile]={logs:[],hintUses:0,correct:0,total:0};
+function saveProfiles(){
+  localStorage.setItem(state.profileKey, JSON.stringify(state.profiles));
 }
-function fmtAcc(p){
-  const tot=p.total||0, cor=p.correct||0;
-  if(!tot) return '正答率：—';
-  return `正答率：${cor}/${tot}（${Math.round(cor/tot*100)}%） / ヒント使用：${p.hintUses||0}`;
-}
-
-/* ===== UIユーティリティ ===== */
-function normalize(s){ return (s||'').trim().replace('＞','>').replace('＜','<').replace('＝','='); }
-function lcm(a,b){ const g=(x,y)=>y?g(y,x%y):Math.abs(x); return Math.abs(a*b)/g(a,b); }
-function speak(text){
-  if(!('speechSynthesis' in window)) return alert('このブラウザは読み上げに対応していません');
-  const u=new SpeechSynthesisUtterance(text); u.lang='ja-JP';
-  window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
-}
-
-/* ===== ヒント生成 ===== */
-function makeHint1(type,payload){
-  if(type==='fraction_compare'){
-    const {A,B,C,D}=payload;
-    if(B===D) return 'ヒント: 分母が同じなら分子の大小だけで比べられるよ。';
-    const L=lcm(B,D); return `ヒント: 分母を ${L} にそろえると比べやすいよ。`;
-  }
-  if(type==='gcd'){
-    const {X,Y}=payload; const a=Math.max(X,Y), b=Math.min(X,Y);
-    return `ヒント: ユークリッドの互除法。まず ${a} を ${b} で割って余りを出そう。`;
-  }
-  return 'ヒントは準備中です。';
-}
-function makeHint2(type,payload){
-  if(type==='fraction_compare'){
-    const {A,B,C,D}=payload;
-    return `もう少しヒント: 交差積で ${A}×${D} と ${C}×${B} を比べよう。`;
-  }
-  if(type==='gcd'){
-    const {X,Y}=payload; const a=Math.max(X,Y), b=Math.min(X,Y); const r=a%b;
-    if(r===0) return `もう少しヒント: ちょうど割り切れたね。最大公約数は ${b}。`;
-    return `もう少しヒント: 余りは ${r}。次は ${b} と ${r} で同じ操作をくり返そう。`;
-  }
-  return '';
-}
-
-/* ===== やさしい日本語（簡易版） ===== */
-function simpleJapanese(text){
-  if(!text) return '';
-  let t=text;
-  const rep=[
-    ['分母','わる数（下の数）'],
-    ['分子','わられる数（上の数）'],
-    ['比較','くらべます'],
-    ['等しい','同じ'],
-    ['最大公約数','いちばん大きい共通のわり算の答え'],
-    ['互除法','わり算をくり返す方法'],
-    ['余り','あまり'],
-    ['分数','わり算の形'],
-  ];
-  rep.forEach(([a,b])=>{ t=t.replaceAll(a,b); });
-  t=t.replaceAll('>','「大きい」').replaceAll('<','「小さい」').replaceAll('=','「同じ」');
-  t=t.replace(/。/g,'。 ').replace(/\s+/g,' ').trim();
-  if(t.length>80){ t=t.replace(/。 /g,'。\n・'); t='・'+t; }
-  return t;
-}
-
-/* ===== API ===== */
-async function fetchNext(){
-  const type=document.getElementById('type').value;
-  const level=document.getElementById('level').value;
-  document.getElementById('helper').textContent = (type==='fraction_compare')
-    ? '(>, <, = のいずれかで答えます。全角でもOK)'
-    : '(半角数字で答えます)';
-
-  const res=await fetch(`${API}/problems/next?type=${encodeURIComponent(type)}&level=${level}`);
-  current=await res.json();
-  current._start=Date.now();
-  document.getElementById('question').textContent=current.render?.stem||'取得失敗';
-  document.getElementById('answer').value='';
-  document.getElementById('hintBox').textContent='';
-  document.getElementById('easyBox').textContent='';
-  speakingHintText='';
-  document.getElementById('result').textContent='';
-}
-
-async function submitAnswer(val){
-  if(!current) return;
-  const type=document.getElementById('type').value;
-  let ans=(val ?? document.getElementById('answer').value ?? '').toString().trim();
-  if(type==='fraction_compare'){
-    ans=normalize(ans);
-    if(!['>','<','='].includes(ans)){ alert('「>」「<」「=」のどれかで答えてください'); return; }
-  }else{
-    if(!/^\d+$/.test(ans)){ alert('最大公約数は半角数字で入力してください'); return; }
-  }
-  const res=await fetch(`${API}/attempts/grade`,{
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({answer:ans, payload:current.payload})
+function renderProfileSelect(){
+  const sel = document.getElementById('profile');
+  sel.innerHTML = '';
+  Object.keys(state.profiles).forEach(name=>{
+    const opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    if (name === state.selectedProfile) opt.selected = true;
+    sel.appendChild(opt);
   });
-  const out=await res.json();
-  showResult(out);
 }
-
-/* ===== ログ ===== */
-function saveLog(ok,ms,stem){
-  ensureProfile();
-  const p=profiles[currentProfile];
-  p.logs.unshift({t:Date.now(),unit:document.getElementById('type').value,stem,correct:ok,ms});
-  if(p.logs.length>200) p.logs.pop();
-  p.total=(p.total||0)+1;
-  if(ok) p.correct=(p.correct||0)+1;
-  saveAll();
-}
-function addHintUse(){
-  ensureProfile();
-  profiles[currentProfile].hintUses=(profiles[currentProfile].hintUses||0)+1;
-  saveAll(); renderLog();
-}
-function renderLog(){
-  ensureProfile();
-  const p=profiles[currentProfile];
-  const ul=document.getElementById('log'); ul.innerHTML='';
-  p.logs.forEach(l=>{
-    const unit=(l.unit==='gcd')?'最大公約数':'分数の大小';
-    const msText=showDetail?` / ${l.ms}ms`:''; // デフォルト非表示
-    const li=document.createElement('li');
-    li.textContent=`${l.correct?'◯':'×'} ${unit}：${l.stem}${msText}`;
-    ul.appendChild(li);
-  });
-  document.getElementById('acc').textContent=fmtAcc(p);
-  document.getElementById('profileStats').textContent=`現在: ${currentProfile} / ${fmtAcc(p).replace('正答率：','')}`;
-}
-
-/* ===== 結果表示 ===== */
-function showResult(out){
-  const ms=Date.now()-(current?._start||Date.now());
-  const type=document.getElementById('type').value;
-  let step='';
-  if(!out.correct){
-    if(type==='fraction_compare'){
-      const {A,B,C,D}=current.payload;
-      step=`（手順）交差積を比べる → ${A}×${D} と ${C}×${B} をくらべよう。`;
-    }else{
-      const {X,Y}=current.payload; const a=Math.max(X,Y), b=Math.min(X,Y);
-      step=`（手順）${a}÷${b} の余り → 次は ${b} と 余りで同じ操作。`;
-    }
-  }
-  document.getElementById('result').innerHTML = out.correct
-    ? `<span class="ok">正解！</span>`
-    : `<span class="ng">不正解…</span> 正しくは <b>${out.ground_truth}</b>。<br>${out.feedback_short||''} ${step}`;
-  saveLog(!!out.correct, ms, current.render?.stem||'');
-  renderLog();
-}
-
-/* ===== ダッシュボード ===== */
-function aggregateAll(){
-  const all=profiles||{}; const rows=[]; const unitAgg={};
-  Object.entries(all).forEach(([name,p])=>{
-    const total=p.total||0, correct=p.correct||0, hints=p.hintUses||0;
-    rows.push({name,total,correct,hints,acc: total?Math.round(correct/total*100):0});
-    (p.logs||[]).forEach(l=>{
-      const u=l.unit||'unknown';
-      if(!unitAgg[u]) unitAgg[u]={total:0,correct:0};
-      unitAgg[u].total+=1; unitAgg[u].correct+=l.correct?1:0;
-    });
-  });
-  return {rows,unitAgg};
-}
-function unitLabel(u){ return u==='gcd'?'最大公約数':(u==='fraction_compare'?'分数の大小':u); }
-function renderDashboard(){
-  const {rows,unitAgg}=aggregateAll();
-  const html = `
-    <div class="card">
-      <h4 style="margin:0 0 8px">プロフィール別集計</h4>
-      <div class="mono" style="overflow:auto">
-        <table>
-          <thead><tr>
-            <th>名前</th><th style="text-align:right">正答</th><th style="text-align:right">合計</th>
-            <th style="text-align:right">正答率</th><th style="text-align:right">ヒント使用</th>
-          </tr></thead>
-          <tbody>
-            ${rows.map(r=>`
-              <tr>
-                <td>${r.name}</td>
-                <td style="text-align:right">${r.correct}</td>
-                <td style="text-align:right">${r.total}</td>
-                <td style="text-align:right">${r.acc}%</td>
-                <td style="text-align:right">${r.hints}</td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <div class="card" style="margin-top:12px">
-      <h4 style="margin:0 0 8px">単元別集計（全プロフィール）</h4>
-      <ul style="margin:0; padding-left:18px">
-        ${Object.entries(unitAgg).map(([u,a])=>{
-          const acc=a.total?Math.round(a.correct/a.total*100):0;
-          return `<li>${unitLabel(u)}：${a.correct}/${a.total}（${acc}%）</li>`;
-        }).join('')}
-      </ul>
-    </div>`;
-  document.getElementById('dashBody').innerHTML=html;
-}
-function exportAllCSV(){
-  const header=['profile','datetime','unit','stem','correct'];
-  const rows=[header];
-  Object.entries(profiles||{}).forEach(([name,p])=>{
-    (p.logs||[]).forEach(l=>{
-      rows.push([
-        name,
-        new Date(l.t||Date.now()).toISOString(),
-        l.unit||'',
-        (l.stem||'').replace(/\s+/g,' ').replace(/,/g,'、'),
-        l.correct?1:0
-      ]);
-    });
-  });
-  const csv=rows.map(r=>r.join(',')).join('\n');
-  const blob=new Blob([csv],{type:'text/csv'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a'); a.href=url; a.download='nlt-logs.csv'; a.click();
-  URL.revokeObjectURL(url);
-}
-
-/* ===== 初期化 ===== */
-document.addEventListener('DOMContentLoaded', ()=>{
-  // 保存の読み込み
-  try{ profiles=JSON.parse(localStorage.getItem('nlt_profiles')||'{}')||{}; }catch(e){ profiles={}; }
-  currentProfile=localStorage.getItem('nlt_current_profile')||'';
-  noProfInit();
-
-  // プロフィールUI
-  const profSel=document.getElementById('profile');
-  function refreshProfileList(){
-    profSel.innerHTML='';
-    Object.keys(profiles).forEach(name=>{
-      const opt=document.createElement('option'); opt.value=name; opt.textContent=name; profSel.appendChild(opt);
-    });
-    profSel.value=currentProfile;
-  }
-  refreshProfileList();
-  profSel.onchange=()=>{ currentProfile=profSel.value; saveAll(); renderLog(); };
-  document.getElementById('createProfile').onclick=()=>{
-    const name=prompt('新しいプロフィール名'); if(!name) return;
-    if(profiles[name]) return alert('その名前は既にあります');
-    profiles[name]={logs:[],hintUses:0,correct:0,total:0};
-    currentProfile=name; saveAll(); refreshProfileList(); renderLog();
-  };
-  document.getElementById('renameProfile').onclick=()=>{
-    const newName=prompt('プロフィール名を変更：', currentProfile);
-    if(!newName || newName===currentProfile) return;
-    if(profiles[newName]) return alert('その名前は既にあります');
-    profiles[newName]=profiles[currentProfile]; delete profiles[currentProfile];
-    currentProfile=newName; saveAll(); refreshProfileList(); renderLog();
-  };
-
-  // 文字サイズ
-  document.getElementById('fontUp').onclick=()=>{
-    const cur=parseFloat(getComputedStyle(document.body).fontSize); document.body.style.fontSize=(cur+1)+'px';
-  };
-  document.getElementById('fontDown').onclick=()=>{
-    const cur=parseFloat(getComputedStyle(document.body).fontSize); document.body.style.fontSize=Math.max(12,cur-1)+'px';
-  };
-
-  // 出題・採点
-  document.getElementById('next').onclick=fetchNext;
-  document.getElementById('submit').onclick=()=>submitAnswer();
-  document.getElementById('btn_gt').onclick=()=>submitAnswer('>');
-  document.getElementById('btn_lt').onclick=()=>submitAnswer('<');
-  document.getElementById('btn_eq').onclick=()=>submitAnswer('=');
-
-  // ヒント・やさしい日本語
-  document.getElementById('hint').onclick=()=>{
-    if(!current) return;
-    const t=document.getElementById('type').value;
-    const h=makeHint1(t,current.payload);
-    document.getElementById('hintBox').textContent=h; speakingHintText=h; addHintUse();
-  };
-  document.getElementById('hint2').onclick=()=>{
-    if(!current) return;
-    const t=document.getElementById('type').value;
-    const h=makeHint2(t,current.payload);
-    const box=document.getElementById('hintBox'); box.textContent=box.textContent?(box.textContent+' / '+h):h;
-    speakingHintText=box.textContent; addHintUse();
-  };
-  document.getElementById('easyJP').onclick=()=>{
-    const base=(document.getElementById('hintBox').textContent.trim()||document.getElementById('question').textContent.trim());
-    document.getElementById('easyBox').textContent = simpleJapanese(base) || 'いまは説明できる内容がありません。';
-  };
-
-  // 読み上げ
-  document.getElementById('ttsQ').onclick=()=>{
-    const q=document.getElementById('question').textContent.trim(); if(q) speak(q);
-  };
-  document.getElementById('ttsH').onclick=()=>{
-    const h=speakingHintText || document.getElementById('hintBox').textContent.trim(); if(h) speak(h);
-  };
-
-  // 詳細表示トグル
-  document.querySelector('details').addEventListener('toggle', (e)=>{ showDetail=e.target.open; renderLog(); });
-
-  // 先生モード
-  const dlg=document.getElementById('dashDialog');
-  document.getElementById('teacherMode').onclick=()=>{ renderDashboard(); dlg.showModal(); };
-  document.getElementById('exportCSV').onclick=exportAllCSV;
-
-  // 初回出題
-  fetchNext().then(renderLog);
+document.getElementById('profile').addEventListener('change', (e)=>{
+  state.selectedProfile = e.target.value;
+  refreshLog();
 });
+document.getElementById('newProfile').addEventListener('click', ()=>{
+  const name = prompt('新しいプロフィール名');
+  if (!name) return;
+  if (state.profiles[name]) { alert('既に存在します'); return; }
+  state.profiles[name] = { logs:[], correct:0, total:0 };
+  state.selectedProfile = name;
+  saveProfiles(); renderProfileSelect(); refreshLog();
+});
+document.getElementById('renameProfile').addEventListener('click', ()=>{
+  const old = state.selectedProfile;
+  const name = prompt('新しい名称', old);
+  if (!name || name === old) return;
+  if (state.profiles[name]) { alert('同名が存在します'); return; }
+  state.profiles[name] = state.profiles[old];
+  delete state.profiles[old];
+  state.selectedProfile = name;
+  saveProfiles(); renderProfileSelect(); refreshLog();
+});
+
+/** ============================
+ *  画面表示の切替
+ *  ============================ */
+function setCompareRowByType(){
+  const type = document.getElementById('type').value;
+  const row = document.getElementById('cmpRow');
+  const unit = document.getElementById('unitHint');
+  if (type === 'fraction_compare') {
+    row.style.display = 'flex';
+    document.getElementById('answer').placeholder = '例: > / < / =（分数の大小）';
+    unit.textContent = '（>, <, = のいずれかで答えます）';
+  } else {
+    row.style.display = 'none';
+    document.getElementById('answer').placeholder = '例: 最大公約数を半角数字で';
+    unit.textContent = '（半角数字で答えます）';
+  }
+}
+
+/** ============================
+ *  API
+ *  ============================ */
+async function fetchNext(){
+  const type = document.getElementById('type').value;
+  const level = document.getElementById('level').value;
+
+  setCompareRowByType();
+
+  const res = await fetch(`${API}/problems/next?type=${encodeURIComponent(type)}&level=${level}`);
+  current = await res.json();
+  current._start = Date.now();
+
+  document.getElementById('question').textContent = current.render?.stem || '取得失敗';
+  document.getElementById('answer').value = '';
+  document.getElementById('result').textContent = '';
+}
+
+async function grade(answerText){
+  if (!current) return;
+  try{
+    const res = await fetch(`${API}/grade`, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        answer: answerText,
+        payload: current.payload,
+        template_id: current.template_id
+      })
+    });
+    const g = await res.json();
+
+    // 表示
+    const ms = Date.now() - current._start;
+    const ok = !!g?.correct;
+    document.getElementById('result').innerHTML =
+      ok ? `✅ 正解！` : `❌ 不正解。正答: <span class="mono">${g?.gold || '—'}</span>`;
+
+    // ログ蓄積
+    const prof = state.profiles[state.selectedProfile];
+    prof.total++; if (ok) prof.correct++;
+    const item = {
+      t: new Date().toISOString(),
+      stem: current.render?.stem || '',
+      ms, ok,
+      gold: g?.gold ?? ''
+    };
+    prof.logs.unshift(item);
+    prof.logs = prof.logs.slice(0, 500); // 上限
+    saveProfiles();
+    refreshLog();
+
+    // 次の問題へ
+    current = null;
+
+  } catch(err){
+    console.error(err);
+    alert('採点に失敗しました。通信状況をご確認ください。');
+  }
+}
+
+/** ============================
+ *  学習記録
+ *  ============================ */
+function refreshLog(){
+  const prof = state.profiles[state.selectedProfile];
+  // 正答率
+  const rate = prof.total ? Math.round((prof.correct / prof.total) * 100) : 0;
+  document.getElementById('rate').textContent = `正答率：${prof.total? rate+'%': 'ー'}`;
+
+  // リスト
+  const logEl = document.getElementById('log');
+  logEl.innerHTML = '';
+  prof.logs.forEach(item=>{
+    const li = document.createElement('div');
+    li.innerHTML = `• ${item.ok?'○':'×'} <span class="mono">${escapeHtml(item.stem)}</span>
+      <span class="time muted"> / ${item.ms}ms</span>
+      ${item.ok ? '' : ` / 正答: <span class="mono">${escapeHtml(item.gold)}</span>`}`;
+    logEl.appendChild(li);
+  });
+}
+
+// ms表示のトグル（先生の詳細確認向け）
+document.getElementById('logDetailToggle').addEventListener('click', ()=>{
+  state.showMs = !state.showMs;
+  const on = state.showMs;
+  document.getElementById('logDetailToggle').textContent =
+    (on ? '▼ 詳細（時間ms）を非表示' : '▶ 詳細（時間ms）を表示');
+  document.querySelectorAll('#logCard .time').forEach(el=>{
+    el.style.display = on ? 'inline' : 'none';
+  });
+});
+
+/** ============================
+ *  ユーティリティ
+ *  ============================ */
+function escapeHtml(s){
+  return String(s??'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+}
+
+/** ============================
+ *  イベント
+ *  ============================ */
+document.getElementById('type').addEventListener('change', fetchNext);
+document.getElementById('level').addEventListener('change', fetchNext);
+document.getElementById('next').addEventListener('click', fetchNext);
+
+// 比較ボタン
+document.getElementById('btn_gt').addEventListener('click', ()=>grade('>'));
+document.getElementById('btn_lt').addEventListener('click', ()=>grade('<'));
+document.getElementById('btn_eq').addEventListener('click', ()=>grade('='));
+
+// 手入力採点
+document.getElementById('submit').addEventListener('click', ()=>{
+  const a = document.getElementById('answer').value.trim();
+  if (!a) return;
+  grade(a);
+});
+document.getElementById('answer').addEventListener('keydown',(e)=>{
+  if (e.key==='Enter'){ e.preventDefault(); document.getElementById('submit').click(); }
+});
+
+// 学習記録の表示/非表示トグル
+document.getElementById('toggleLog').addEventListener('click', ()=>{
+  state.showLog = !state.showLog;
+  document.getElementById('logCard').classList.toggle('hide', !state.showLog);
+  document.getElementById('toggleLog').textContent = state.showLog ? '非表示' : '表示';
+});
+
+// モード切替（現時点ではUI配置のみ。将来拡張のフック）
+document.getElementById('mode').addEventListener('change', (e)=>{
+  // 先生モードでも基本UIは同じ。必要に応じてここに“先生だけの機能”を後で生やす。
+});
+
+/** 初期化 */
+loadProfiles();
+setCompareRowByType();
+refreshLog();
+fetchNext();
 </script>
 </body>
 </html>
