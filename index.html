@@ -5,498 +5,395 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>オンライン問題（試作）</title>
   <style>
-    :root {
-      --gap: 14px;
-      --radius: 14px;
-      --ui: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans JP", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
-      --mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Courier New", monospace;
-      --bg: #fff;
-      --fg: #111;
-      --muted: #667085;
-      --card: #fff;
-      --stroke: #e5e7eb;
-      --accent: #111827;
-      --accent-weak: #334155;
-    }
-    * { box-sizing: border-box; }
-    body {
-      font-family: var(--ui);
-      color: var(--fg);
-      background: var(--bg);
-      max-width: 960px;
-      margin: 24px auto;
-      padding: 0 16px 100px;
-      line-height: 1.6;
-    }
-    h1 { font-size: clamp(22px, 3vw, 28px); margin: 0 0 16px; }
-    .muted { color: var(--muted); }
-    .row { display: flex; gap: var(--gap); flex-wrap: wrap; align-items: center; }
-    .card {
-      border: 1px solid var(--stroke);
-      background: var(--card);
-      border-radius: var(--radius);
-      padding: 16px;
-    }
-    label { display:block; font-weight: 600; margin-bottom: 6px; }
-    input[type="text"]{
-      width: 100%;
-      height: 40px;
-      border: 1px solid var(--stroke);
-      border-radius: 10px;
-      padding: 0 12px;
-      font-size: 16px;
-    }
-    select, button {
-      height: 40px;
-      border-radius: 10px;
-      border: 1px solid var(--stroke);
-      background: #fff;
-      padding: 0 12px;
-      font-size: 15px;
-      cursor: pointer;
-    }
-    button.primary {
-      background: var(--accent);
-      color: #fff;
-      border: 1px solid var(--accent);
-    }
-    button.secondary {
-      background: #fff;
-      color: var(--accent);
-      border: 1px solid var(--accent);
-    }
-    .badge { display:inline-block; padding: 2px 8px; border:1px solid #e5e7eb; border-radius: 999px; background:#f3f4f6; font-size:12px; }
-    .mono { font-family: var(--mono); }
-    .space-top { margin-top: 14px; }
-    .w-100 { width: 100%; }
-    .justify-between { display:flex; justify-content: space-between; align-items: center; }
-    .right { text-align:right; }
-    .hide { display:none !important; }
-
-    /* 下部バー（先生モード & プロフィール切替） */
-    .footer {
-      position: fixed;
-      left: 0; right: 0; bottom: 0;
-      background: #fff;
-      border-top: 1px solid var(--stroke);
-      box-shadow: 0 -4px 24px rgba(0,0,0,0.06);
-    }
-    .footer-inner {
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 12px 16px;
-      display: flex;
-      gap: var(--gap);
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-    }
-    .footer .row { gap: 8px; }
-
-    /* 学習記録カード */
-    #logCard .time { display: none; } /* デフォルトで時間(ms)は非表示 */
-    #logDetailToggle { cursor:pointer; color: var(--accent-weak); text-decoration: underline; }
+    :root { --gap:16px; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin: 0; background:#fafafa; color:#111; }
+    .wrap { max-width: 960px; margin: 24px auto; padding: 0 16px; }
+    h1 { font-size: 22px; margin: 0 0 16px; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; }
+    .section { margin-top: 16px; }
+    label { font-weight:600; margin-right: 6px; }
+    select, input[type="text"], button { font-size: 16px; }
+    select, input[type="text"] { padding:8px 10px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; }
+    button { padding:8px 14px; border:1px solid #111; background:#111; color:#fff; border-radius:10px; cursor:pointer; }
+    button.secondary { background:#fff; color:#111; border-color:#e5e7eb; }
+    button.ghost { background:transparent; border-color:transparent; color:#111; }
+    .muted { color:#6b7280; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .hidden { display:none; }
+    .toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+    .ansbtns button { width:48px; height:40px; font-size:18px; }
+    .ok { color:#059669; }
+    .ng { color:#dc2626; }
+    ul { margin: 8px 0 0 16px; padding:0; }
+    li { margin: 3px 0; }
+    .bottom { display:flex; gap:12px; align-items:center; justify-content:space-between; margin-top:24px; flex-wrap:wrap; }
+    .btns { display:flex; gap:8px; align-items:center; }
   </style>
 </head>
 <body>
+  <div class="wrap">
+    <h1>オンライン問題（試作）</h1>
 
-  <h1>オンライン問題（試作）</h1>
-
-  <!-- 学習者向け：単元・難易度・次の問題（最上段） -->
-  <div class="card">
-    <div class="row">
-      <div>
-        <label>単元</label>
-        <select id="type">
-          <option value="fraction_compare">分数の大小</option>
-          <option value="gcd">最大公約数</option>
-        </select>
-      </div>
-      <div>
-        <label>難易度</label>
-        <select id="level">
-          <option value="1">やさしい</option>
-          <option value="2" selected>ふつう</option>
-          <option value="3">むずかしい</option>
-        </select>
-      </div>
-      <div style="margin-left:auto">
-        <label class="muted">　</label>
-        <button id="next" class="secondary">次の問題</button>
-      </div>
-      <div>
-        <label class="muted">学習記録</label>
-        <button id="toggleLog" class="secondary">表示</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 問題 -->
-  <div class="card space-top">
-    <div class="row justify-between">
-      <div class="badge">問題</div>
-      <div class="muted mono" id="unitHint"></div>
-    </div>
-    <div id="question" style="margin-top:12px; font-size:18px;">問題を取得中…</div>
-  </div>
-
-  <!-- 答え -->
-  <div class="card space-top">
-    <label>答え</label>
-    <div class="row" id="cmpRow" style="gap:8px;">
-      <button class="secondary" id="btn_gt" aria-label="＞で答える">&gt;</button>
-      <button class="secondary" id="btn_lt" aria-label="＜で答える">&lt;</button>
-      <button class="secondary" id="btn_eq" aria-label="＝で答える">=</button>
-    </div>
-
-    <div class="row space-top">
-      <input id="answer" type="text" class="w-100" placeholder="例: > / < / =（分数の大小） または 例: 24 と 36 の最大公約数 を半角数字で" />
-      <button id="submit" class="primary">採点</button>
-    </div>
-
-    <div id="result" class="space-top"></div>
-  </div>
-
-  <!-- 学習記録（トグルで表示/非表示） -->
-  <div id="logCard" class="card space-top hide">
-    <div class="justify-between">
-      <div class="badge">学習記録</div>
-      <div id="logDetailToggle">▶ 詳細（時間ms）を表示</div>
-    </div>
-    <div id="log" class="mono" style="margin-top:8px;"></div>
-    <div class="muted" id="rate" style="margin-top:8px;">正答率：ー</div>
-  </div>
-
-  <!-- 画面下部の先生モード＆プロフィール切替 -->
-  <div class="footer">
-    <div class="footer-inner">
+    <!-- 上部コントロール -->
+    <div class="card">
       <div class="row">
-        <label class="muted">プロフィール</label>
-        <select id="profile"></select>
+        <div class="row">
+          <label for="unit">単元：</label>
+          <select id="unit">
+            <option value="fraction">分数の大小</option>
+            <option value="gcd">最大公約数</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="difficulty">難易度：</label>
+          <select id="difficulty">
+            <option value="easy">やさしい</option>
+            <option value="normal" selected>ふつう</option>
+            <option value="hard">むずかしい</option>
+          </select>
+        </div>
+        <button id="next">次の問題</button>
+
+        <div class="row" style="margin-left:auto; gap:6px;">
+          <span class="muted">学習記録</span>
+          <button id="toggleLog" class="secondary">非表示</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 問題 -->
+    <div class="card section">
+      <div class="muted mono">（>, <, = のいずれかで答えます／GCDは半角数字）</div>
+      <div id="question" style="font-size:18px; margin-top:6px;">問題を読み込み中…</div>
+
+      <div class="section">
+        <div class="row">
+          <label>答え</label>
+          <div class="ansbtns row">
+            <button id="btnGt" class="secondary">&gt;</button>
+            <button id="btnLt" class="secondary">&lt;</button>
+            <button id="btnEq" class="secondary">=</button>
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <input id="answer" type="text" placeholder="例： > / < / = （分数の大小）または 12（最大公約数）" style="flex:1;" />
+          <button id="submit">採点</button>
+        </div>
+        <div id="result" class="section"></div>
+      </div>
+    </div>
+
+    <!-- 学習記録 -->
+    <div id="logCard" class="card section">
+      <div class="toolbar">
+        <div class="row" style="gap:8px"><strong>学習記録</strong><span id="stats" class="muted"></span></div>
+        <button id="toggleMs" class="ghost mono">▶ 詳細（時間ms）を表示</button>
+      </div>
+      <ul id="log"></ul>
+    </div>
+
+    <!-- 先生ダッシュボード（モード：先生で表示） -->
+    <div id="dashCard" class="card section hidden">
+      <div class="toolbar">
+        <strong>先生ダッシュボード</strong>
+        <button id="exportCsv" class="secondary">CSVエクスポート</button>
+      </div>
+      <div id="dashSummary" class="muted mono" style="margin-top:6px;"></div>
+      <div style="overflow-x:auto; margin-top:8px;">
+        <table id="dashTable" class="mono" style="border-collapse:collapse; width:100%;">
+          <thead>
+            <tr>
+              <th style="border-bottom:1px solid #e5e7eb; text-align:left; padding:4px 6px;">プロフィール</th>
+              <th style="border-bottom:1px solid #e5e7eb; text-align:right; padding:4px 6px;">総問数</th>
+              <th style="border-bottom:1px solid #e5e7eb; text-align:right; padding:4px 6px;">正解</th>
+              <th style="border-bottom:1px solid #e5e7eb; text-align:right; padding:4px 6px;">正答率</th>
+              <th style="border-bottom:1px solid #e5e7eb; text-align:right; padding:4px 6px;">分数の大小</th>
+              <th style="border-bottom:1px solid #e5e7eb; text-align:right; padding:4px 6px;">最大公約数</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 画面下：プロフィール＆モード -->
+    <div class="bottom">
+      <div class="btns">
+        <label for="profileSel">プロフィール：</label>
+        <select id="profileSel"></select>
         <button id="newProfile" class="secondary">新規プロフィール</button>
         <button id="renameProfile" class="secondary">名称変更</button>
       </div>
-
-      <div class="row">
-        <label class="muted">モード</label>
-        <select id="mode">
-          <option value="student" selected>学習者</option>
+      <div class="btns">
+        <label for="modeSel">モード：</label>
+        <select id="modeSel">
+          <option value="learner" selected>学習者</option>
           <option value="teacher">先生</option>
         </select>
       </div>
     </div>
   </div>
 
-<script>
-  const API_BASE = 'https://nlt-proto.onrender.com/api/v1';
+  <script>
+    // ====== API の場所（Render の URL に合わせて置き換えてOK）======
+    const API_BASE = 'https://nlt-proto.onrender.com/api/v1';
+    // 他の Render URL の場合は ↑ をあなたの URL に変更してください
 
-  // ==== 状態 ====
-  let current = null;   // 出題インスタンス
-  let showMs = false;   // 学習記録のms表示
-  let logVisible = false;
+    // ====== 状態 ======
+    let current = null;
+    let logVisible = true;
+    let showMs = false;
 
-  // ---- プロフィール（localStorage: nlt-proto:profiles） ----
-  const storeKey = 'nlt-proto:profiles';
-  function loadProfiles() {
-    try { return JSON.parse(localStorage.getItem(storeKey)) ?? {}; }
-    catch { return {}; }
-  }
-  function saveProfiles(map) { localStorage.setItem(storeKey, JSON.stringify(map)); }
-  function firstProfileName(map) { return Object.keys(map)[0] || '学習者A'; }
-  function ensureInit() {
-    const map = loadProfiles();
-    if (!Object.keys(map).length) {
-      map['学習者A'] = { log: [] };
-      saveProfiles(map);
+    // ====== ストレージ（プロフィールごとの記録）======
+    const STORE_KEY = 'nlt-proto:profiles';
+    const CUR_KEY   = 'nlt-proto:currentProfile';
+
+    function loadProfiles() {
+      try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
+      catch { return {}; }
     }
-  }
-  ensureInit();
+    function saveProfiles(m) { localStorage.setItem(STORE_KEY, JSON.stringify(m)); }
+    function ensureInit() {
+      const m = loadProfiles();
+      if (!Object.keys(m).length) {
+        m['学習者A'] = { log: [] };
+        saveProfiles(m);
+        localStorage.setItem(CUR_KEY, '学習者A');
+      }
+    }
+    ensureInit();
 
-  // ---- 要素参照（IDは既存HTMLに合わせてください）----
-  const $ = (id) => document.getElementById(id);
-  const profileSel = $('profileSel');
-  const newProfileBtn = $('newProfile');
-  const renameBtn = $('renameProfile');
-  const modeSel = $('modeSel');
+    // ====== 要素 ======
+    const $ = id => document.getElementById(id);
+    const unitSel = $('unit');
+    const diffSel = $('difficulty');
+    const nextBtn = $('next');
+    const qEl = $('question');
+    const ans = $('answer');
+    const submit = $('submit');
+    const btnGt = $('btnGt'), btnLt = $('btnLt'), btnEq = $('btnEq');
+    const resultEl = $('result');
 
-  const unitSel = $('unit');
-  const diffSel = $('difficulty');
-  const nextBtn = $('next');
-  const qEl = $('question');
-  const ansInput = $('answer');
-  const resultEl = $('result');
-  const submitBtn = $('submit');
+    const toggleLog = $('toggleLog'), logCard = $('logCard');
+    const logUl = $('log'), stats = $('stats'), toggleMs = $('toggleMs');
 
-  const btnGt = $('btnGt');
-  const btnLt = $('btnLt');
-  const btnEq = $('btnEq');
+    const profileSel = $('profileSel'), newProfile = $('newProfile'), renameProfile = $('renameProfile');
+    const modeSel = $('modeSel'), dashCard = $('dashCard'), dashSummary = $('dashSummary'), dashTableBody = document.querySelector('#dashTable tbody');
+    const exportCsv = $('exportCsv');
 
-  const logCard = $('logCard');
-  const toggleLogBtn = $('toggleLog');
-  const logUl = $('log');
-  const statsEl = $('stats');
-  const toggleMsBtn = $('toggleMs');
+    // ====== UI 初期化 ======
+    function refreshProfilesUI() {
+      const map = loadProfiles();
+      let cur = localStorage.getItem(CUR_KEY);
+      if (!cur || !map[cur]) cur = Object.keys(map)[0];
+      localStorage.setItem(CUR_KEY, cur);
 
-  // ==== 先生ダッシュボード（下部カードの直前に挿入）====
-  const dashCard = document.createElement('div');
-  dashCard.className = 'card section hidden';
-  dashCard.id = 'dashCard';
-  dashCard.innerHTML = `
-    <div class="toolbar">
-      <div class="tiny muted">先生ダッシュボード（この端末に登録されたプロフィールの集計）</div>
-      <div class="right">
-        <button id="exportCsv" class="secondary tiny">CSVエクスポート</button>
-      </div>
-    </div>
-    <div id="dashSummary" class="mono tiny muted" style="margin-top:6px;"></div>
-    <div style="overflow-x:auto; margin-top:8px;">
-      <table id="dashTable" class="mono" style="border-collapse:collapse; width:100%;">
-        <thead>
-          <tr>
-            <th style="border-bottom:1px solid #e5e7eb; text-align:left; padding:4px 6px;">プロフィール</th>
-            <th style="border-bottom:1px solid #e5e7eb; text-align:right; padding:4px 6px;">総問数</th>
-            <th style="border-bottom:1px solid #e5e7eb; text-align:right; padding:4px 6px;">正解</th>
-            <th style="border-bottom:1px solid #e5e7eb; text-align:right; padding:4px 6px;">正答率</th>
-            <th style="border-bottom:1px solid #e5e7eb; text-align:right; padding:4px 6px;">分数の大小</th>
-            <th style="border-bottom:1px solid #e5e7eb; text-align:right; padding:4px 6px;">最大公約数</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>`;
-  // 「プロフィール」カードの直前に追加（最下部にある card.section の直前）
-  const sections = document.querySelectorAll('.card.section');
-  if (sections.length) {
-    sections[sections.length - 1].before(dashCard);
-  }
-
-  // ---- プロフィールUI ----
-  function refreshProfileUI() {
-    const map = loadProfiles();
-    const cur = localStorage.getItem('nlt-proto:currentProfile') || firstProfileName(map);
-    if (profileSel) {
       profileSel.innerHTML = '';
-      Object.keys(map).forEach(name => {
-        const opt = document.createElement('option');
-        opt.value = name; opt.textContent = name; profileSel.appendChild(opt);
+      Object.keys(map).forEach(n => {
+        const o = document.createElement('option');
+        o.value = o.textContent = n;
+        profileSel.appendChild(o);
       });
       profileSel.value = cur;
+
+      renderLog();
+      renderDashboard();
     }
-    localStorage.setItem('nlt-proto:currentProfile', cur);
-    renderLog();
-    renderDashboard();
-  }
 
-  if (newProfileBtn) newProfileBtn.onclick = () => {
-    const name = prompt('新しいプロフィール名');
-    if (!name) return;
-    const map = loadProfiles();
-    if (map[name]) { alert('同名が存在します'); return; }
-    map[name] = { log: [] };
-    saveProfiles(map);
-    localStorage.setItem('nlt-proto:currentProfile', name);
-    refreshProfileUI();
-  };
+    newProfile.onclick = () => {
+      const name = prompt('新しいプロフィール名');
+      if (!name) return;
+      const map = loadProfiles();
+      if (map[name]) return alert('同名が存在します');
+      map[name] = { log: [] };
+      saveProfiles(map);
+      localStorage.setItem(CUR_KEY, name);
+      refreshProfilesUI();
+    };
 
-  if (renameBtn) renameBtn.onclick = () => {
-    const map = loadProfiles();
-    const cur = profileSel.value;
-    const name = prompt('新しい名称', cur);
-    if (!name || name === cur) return;
-    if (map[name]) { alert('同名が存在します'); return; }
-    map[name] = map[cur]; delete map[cur];
-    saveProfiles(map);
-    localStorage.setItem('nlt-proto:currentProfile', name);
-    refreshProfileUI();
-  };
+    renameProfile.onclick = () => {
+      const map = loadProfiles();
+      const cur = profileSel.value;
+      const name = prompt('新しい名称', cur);
+      if (!name || name === cur) return;
+      if (map[name]) return alert('同名が存在します');
+      map[name] = map[cur]; delete map[cur];
+      saveProfiles(map);
+      localStorage.setItem(CUR_KEY, name);
+      refreshProfilesUI();
+    };
 
-  if (profileSel) profileSel.onchange = () => {
-    localStorage.setItem('nlt-proto:currentProfile', profileSel.value);
-    renderLog(); renderDashboard();
-  };
+    profileSel.onchange = () => {
+      localStorage.setItem(CUR_KEY, profileSel.value);
+      renderLog(); renderDashboard();
+    };
 
-  // ---- 学習記録表示切替 ----
-  if (toggleLogBtn && logCard) {
-    toggleLogBtn.onclick = () => {
+    // 学習記録の表示切替
+    toggleLog.onclick = () => {
       logVisible = !logVisible;
       logCard.classList.toggle('hidden', !logVisible);
-      toggleLogBtn.textContent = logVisible ? '非表示' : '表示';
+      toggleLog.textContent = logVisible ? '非表示' : '表示';
     };
-  }
-  if (toggleMsBtn) {
-    toggleMsBtn.onclick = () => {
+    toggleMs.onclick = () => {
       showMs = !showMs;
-      toggleMsBtn.textContent = showMs ? '▼ 詳細（時間ms）を非表示' : '▶ 詳細（時間ms）を表示';
+      toggleMs.textContent = showMs ? '▼ 詳細（時間ms）を非表示' : '▶ 詳細（時間ms）を表示';
       renderLog();
     };
-  }
 
-  // ---- 出題取得 ----
-  async function fetchNext() {
-    if (resultEl) resultEl.textContent = '';
-    if (ansInput) ansInput.value = '';
-    const unit = unitSel && unitSel.value === 'gcd' ? 'gcd' : 'fraction';
-    const difficulty = diffSel ? diffSel.value : 'normal';
-    if (qEl) qEl.textContent = '（取得中…）';
-    try {
+    // モード切替（先生ダッシュ表示）
+    modeSel.onchange = () => renderDashboard();
+
+    // ====== 出題取得 ======
+    async function fetchNext() {
+      resultEl.textContent = '';
+      ans.value = '';
+      qEl.textContent = '（取得中…）';
+
+      const unit = unitSel.value;
+      const difficulty = diffSel.value;
+
       const t0 = performance.now();
       const res = await fetch(`${API_BASE}/problems/next?unit=${unit}&difficulty=${difficulty}`);
       const inst = await res.json();
+      inst._t = { getStart: t0, getEnd: performance.now() };
       current = inst;
-      if (qEl) qEl.textContent = inst.render.stem;
-      current._t = { t0, t1: performance.now() };
-    } catch (e) {
-      if (qEl) qEl.textContent = '問題取得に失敗しました。通信状況をご確認ください。';
+      qEl.textContent = inst.render.stem;
     }
-  }
 
-  // ---- 採点 ----
-  async function grade() {
-    if (!current) return;
-    const answer = ansInput ? ansInput.value.trim() : '';
-    if (!answer) return;
-    const tStart = performance.now();
-    try {
+    // ====== 採点 ======
+    async function grade() {
+      if (!current) return;
+      const answer = ans.value.trim();
+      if (!answer) return;
+
+      const t0 = performance.now();
       const res = await fetch(`${API_BASE}/grade`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ template_id: current.template_id, answer, payload: current.payload }),
+        body: JSON.stringify({ template_id: current.template_id, answer, payload: current.payload })
       });
       const data = await res.json();
-      if (!data.ok) throw new Error('採点エラー');
+      const t1 = performance.now();
 
-      // 正答表示
-      if (resultEl) {
-        if (data.correct) {
-          resultEl.textContent = '⭕ 正解！';
-        } else {
-          const expected = data.expected ?? computeExpectedFallback(current);
-          resultEl.textContent = `❌ 不正解。 正答: ${expected}`;
-        }
+      // 表示
+      if (data.ok && data.correct) {
+        resultEl.innerHTML = `<span class="ok">⭕ 正解！</span>`;
+      } else if (data.ok) {
+        resultEl.innerHTML = `<span class="ng">❌ 不正解。</span> 正答：<span class="mono">${data.expected ?? '-'}</span>`;
+      } else {
+        resultEl.textContent = '採点エラー';
       }
 
-      appendLogEntry(data.correct, tStart, data.expected ?? computeExpectedFallback(current));
-      renderLog(); renderDashboard();
-    } catch (e) {
-      alert('採点に失敗しました。通信状況をご確認ください。');
-    }
-  }
-
-  // サーバが古い場合のフォールバック計算
-  function computeExpectedFallback(inst) {
-    if (!inst) return '-';
-    if (inst.template_id === 'math_frac_compare_v1') {
-      const {A,B,C,D} = inst.payload;
-      const lhs = A*D, rhs = C*B;
-      return lhs > rhs ? '>' : lhs < rhs ? '<' : '=';
-    }
-    if (inst.template_id === 'math_gcd_v1') {
-      let {X,Y} = inst.payload;
-      X = Math.abs(X); Y = Math.abs(Y);
-      while (Y) [X,Y] = [Y, X % Y];
-      return String(X);
-    }
-    return '-';
-  }
-
-  function appendLogEntry(correct, tStart, expected) {
-    const map = loadProfiles();
-    const name = localStorage.getItem('nlt-proto:currentProfile') || firstProfileName(map);
-    const rec = map[name] ?? { log: [] };
-    const spentMs = Math.round(performance.now() - tStart);
-    const getMs = current?._t ? Math.round(current._t.t1 - current._t.t0) : null;
-    rec.log.unshift({
-      at: Date.now(),
-      unit: current.meta.unit,
-      diff: current.meta.difficulty,
-      stem: current.render.stem,
-      correct: !!correct,
-      expected: expected ?? null,
-      ms: { fetch: getMs, answer: spentMs }
-    });
-    if (rec.log.length > 200) rec.log.length = 200;
-    map[name] = rec;
-    saveProfiles(map);
-  }
-
-  function renderLog() {
-    if (!statsEl || !logUl) return;
-    const map = loadProfiles();
-    const name = localStorage.getItem('nlt-proto:currentProfile') || firstProfileName(map);
-    const rec = map[name] ?? { log: [] };
-
-    if (!rec.log.length) {
-      statsEl.textContent = '正答率：—';
-    } else {
-      const ok = rec.log.filter(r => r.correct).length;
-      const rate = Math.round((ok / rec.log.length) * 100);
-      statsEl.textContent = `正答率：${rate}%（${ok}/${rec.log.length}）`;
-    }
-
-    logUl.innerHTML = '';
-    rec.log.forEach(r => {
-      const li = document.createElement('li');
-      const head = (r.correct ? '○' : '×') + ' ' + r.stem;
-      const tailMs = showMs ? ` / 取得:${r.ms.fetch ?? '-'}ms / 解答:${r.ms.answer}ms` : '';
-      const tailAns = r.correct ? '' : ` / 正答: ${r.expected ?? '-'}`;
-      li.textContent = `${head}${tailAns}${tailMs}`;
-      logUl.appendChild(li);
-    });
-  }
-
-  // ---- 先生ダッシュボード ----
-  function summarize(map) {
-    const rows = [];
-    for (const name of Object.keys(map)) {
-      const logs = map[name].log ?? [];
-      const total = logs.length;
-      const ok = logs.filter(r => r.correct).length;
-      const acc = total ? Math.round((ok/total)*100) : 0;
-      const byUnit = { fraction: {t:0,ok:0}, gcd:{t:0,ok:0} };
-      logs.forEach(r => {
-        if (r.unit === 'fraction') { byUnit.fraction.t++; if (r.correct) byUnit.fraction.ok++; }
-        if (r.unit === 'gcd') { byUnit.gcd.t++; if (r.correct) byUnit.gcd.ok++; }
+      // 記録
+      appendLog({
+        stem: current.render.stem,
+        unit: current.meta.unit,
+        difficulty: current.meta.difficulty,
+        correct: !!data.correct,
+        expected: data.expected ?? null,
+        ms: {
+          get: Math.round(current._t.getEnd - current._t.getStart),
+          answer: Math.round(t1 - t0)
+        }
       });
-      rows.push({ name, total, ok, acc,
-        frac:`${byUnit.fraction.ok}/${byUnit.fraction.t}`,
-        gcd:`${byUnit.gcd.ok}/${byUnit.gcd.t}` });
+      renderLog();
+      renderDashboard();
     }
-    return rows;
-  }
 
-  function renderDashboard() {
-    const map = loadProfiles();
-    const rows = summarize(map);
+    // ログ追加
+    function appendLog(entry) {
+      const map = loadProfiles();
+      const cur = localStorage.getItem(CUR_KEY);
+      if (!map[cur]) map[cur] = { log: [] };
+      map[cur].log.unshift({ at: Date.now(), ...entry });
+      if (map[cur].log.length > 300) map[cur].log.length = 300;
+      saveProfiles(map);
+    }
 
-    const tableBody = document.querySelector('#dashTable tbody');
-    const sumEl = document.getElementById('dashSummary');
-    if (!tableBody || !sumEl) return;
+    // ログ描画
+    function renderLog() {
+      const map = loadProfiles();
+      const cur = localStorage.getItem(CUR_KEY);
+      const rec = (map[cur]?.log) || [];
+      const ok = rec.filter(r => r.correct).length;
+      const rate = rec.length ? Math.round((ok / rec.length) * 100) : null;
+      stats.textContent = rate == null ? '正答率：—' : `正答率：${rate}%（${ok}/${rec.length}）`;
 
-    // サマリー
-    const totals = Object.values(map).map(p => p.log?.length ?? 0).reduce((a,b)=>a+b,0);
-    sumEl.textContent = `登録プロファイル: ${Object.keys(map).length} / 記録総数: ${totals}`;
+      logUl.innerHTML = '';
+      rec.forEach(r => {
+        const li = document.createElement('li');
+        const ms = showMs ? ` / 取得:${r.ms.get ?? '-'}ms / 解答:${r.ms.answer ?? '-'}ms` : '';
+        const ans = r.correct ? '' : ` / 正答:${r.expected ?? '-'}`;
+        li.textContent = `${r.correct ? '○' : '×'} ${r.stem}${ans}${ms}`;
+        logUl.appendChild(li);
+      });
+    }
 
-    // 行
-    tableBody.innerHTML = '';
-    rows.forEach(r => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td style="border-bottom:1px solid #f3f4f6; padding:4px 6px;">${r.name}</td>
-        <td style="border-bottom:1px solid #f3f4f6; padding:4px 6px; text-align:right;">${r.total}</td>
-        <td style="border-bottom:1px solid #f3f4f6; padding:4px 6px; text-align:right;">${r.ok}</td>
-        <td style="border-bottom:1px solid #f3f4f6; padding:4px 6px; text-align:right;">${r.acc}%</td>
-        <td style="border-bottom:1px solid #f3f4f6; padding:4px 6px; text-align:right;">${r.frac}</td>
-        <td style="border-bottom:1px solid #f3f4f6; padding:4px 6px; text-align:right;">${r.gcd}</td>`;
-      tableBody.appendChild(tr);
-    });
+    // 先生ダッシュ
+    function renderDashboard() {
+      const teacher = modeSel.value === 'teacher';
+      dashCard.classList.toggle('hidden', !teacher);
+      if (!teacher) return;
+
+      const map = loadProfiles();
+      const names = Object.keys(map);
+
+      let totalLogs = 0;
+      dashTableBody.innerHTML = '';
+
+      names.forEach(name => {
+        const logs = map[name].log || [];
+        const total = logs.length;
+        const ok = logs.filter(l => l.correct).length;
+        const acc = total ? Math.round((ok / total) * 100) : 0;
+
+        const cnt = { fraction: { t:0, ok:0 }, gcd: { t:0, ok:0 } };
+        logs.forEach(l => {
+          if (l.unit === 'fraction') { cnt.fraction.t++; if (l.correct) cnt.fraction.ok++; }
+          if (l.unit === 'gcd') { cnt.gcd.t++; if (l.correct) cnt.gcd.ok++; }
+        });
+
+        totalLogs += total;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td style="border-bottom:1px solid #f3f4f6; padding:4px 6px;">${name}</td>
+          <td style="border-bottom:1px solid #f3f4f6; padding:4px 6px; text-align:right;">${total}</td>
+          <td style="border-bottom:1px solid #f3f4f6; padding:4px 6px; text-align:right;">${ok}</td>
+          <td style="border-bottom:1px solid #f3f4f6; padding:4px 6px; text-align:right;">${acc}%</td>
+          <td style="border-bottom:1px solid #f3f4f6; padding:4px 6px; text-align:right;">${cnt.fraction.ok}/${cnt.fraction.t}</td>
+          <td style="border-bottom:1px solid #f3f4f6; padding:4px 6px; text-align:right;">${cnt.gcd.ok}/${cnt.gcd.t}</td>`;
+        dashTableBody.appendChild(tr);
+      });
+
+      dashSummary.textContent = `登録プロファイル: ${names.length} / 記録総数: ${totalLogs}`;
+    }
 
     // CSV
-    const exportBtn = document.getElementById('exportCsv');
-    if (exportBtn) exportBtn.onclick = () => {
-      const header = ['profile','total','correct','accuracy(%)','fraction(ok/total)','gcd(ok/total)'];
+    exportCsv.onclick = () => {
+      const map = loadProfiles();
+      const names = Object.keys(map);
+      const header = ['profile','at','unit','difficulty','stem','correct','expected','ms_get','ms_answer'];
       const lines = [header.join(',')];
-      rows.forEach(r => lines.push([r.name, r.total, r.ok, r.acc, r.frac, r.gcd].join(',')));
-      const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+
+      names.forEach(name => {
+        (map[name].log || []).forEach(l => {
+          lines.push([
+            name,
+            new Date(l.at).toISOString(),
+            l.unit,
+            l.difficulty,
+            `"${(l.stem||'').replace(/"/g,'""')}"`,
+            l.correct ? 1 : 0,
+            l.expected ?? '',
+            l.ms.get ?? '',
+            l.ms.answer ?? ''
+          ].join(','));
+        });
+      });
+
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = 'dashboard.csv';
@@ -504,26 +401,17 @@
       URL.revokeObjectURL(a.href);
     };
 
-    // モードに応じて表示
-    const isTeacher = (modeSel && modeSel.value === 'teacher');
-    dashCard.classList.toggle('hidden', !isTeacher);
-  }
+    // ボタン
+    nextBtn.onclick = fetchNext;
+    submit.onclick = grade;
+    btnGt.onclick = () => { ans.value = '>'; grade(); };
+    btnLt.onclick = () => { ans.value = '<'; grade(); };
+    btnEq.onclick = () => { ans.value = '='; grade(); };
+    ans.addEventListener('keydown', e => { if (e.key === 'Enter') grade(); });
 
-  // モード切替
-  if (modeSel) modeSel.onchange = () => { renderDashboard(); };
-
-  // ボタン
-  if (nextBtn) nextBtn.onclick = fetchNext;
-  if (submitBtn) submitBtn.onclick = grade;
-  if (btnGt) btnGt.onclick = () => { if (ansInput) ansInput.value = '>'; grade(); };
-  if (btnLt) btnLt.onclick = () => { if (ansInput) ansInput.value = '<'; grade(); };
-  if (btnEq) btnEq.onclick = () => { if (ansInput) ansInput.value = '='; grade(); };
-  if (ansInput) ansInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') grade(); });
-
-  // 初期化
-  refreshProfileUI();
-  fetchNext();
-  renderDashboard();
-</script>
+    // 初期表示
+    refreshProfilesUI();
+    fetchNext();
+  </script>
 </body>
 </html>
