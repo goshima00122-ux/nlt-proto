@@ -188,233 +188,342 @@
   </div>
 
 <script>
-/** ============================
- *  APIエンドポイント
- *  ============================ */
-const API = 'https://nlt-proto.onrender.com/api/v1'; // ←必要ならあなたのRender URLに変更
+  const API_BASE = 'https://nlt-proto.onrender.com/api/v1';
 
-/** ============================
- *  状態
- *  ============================ */
-let current = null;
-let speakingHintText = ''; // （読み上げ撤去したので未使用だが残骸があっても挙動に影響なし）
-const state = {
-  profileKey: 'learner_profiles_v1',
-  selectedProfile: '',
-  profiles: {},                // { profileName: { logs:[], correct:0, total:0 } }
-  showLog: false,
-  showMs: false
-};
+  // ==== 状態 ====
+  let current = null;   // 出題インスタンス
+  let showMs = false;   // 学習記録のms表示
+  let logVisible = false;
 
-/** ============================
- *  プロフィール（ローカル保存）
- *  ============================ */
-function loadProfiles(){
-  const raw = localStorage.getItem(state.profileKey);
-  state.profiles = raw ? JSON.parse(raw) : {};
-  const names = Object.keys(state.profiles);
-  if (names.length === 0) {
-    state.profiles['学習者A'] = { logs:[], correct:0, total:0 };
-    state.selectedProfile = '学習者A';
-    saveProfiles();
-  } else {
-    state.selectedProfile = state.selectedProfile || names[0];
+  // ---- プロフィール（localStorage: nlt-proto:profiles） ----
+  const storeKey = 'nlt-proto:profiles';
+  function loadProfiles() {
+    try { return JSON.parse(localStorage.getItem(storeKey)) ?? {}; }
+    catch { return {}; }
   }
-  renderProfileSelect();
-}
-function saveProfiles(){
-  localStorage.setItem(state.profileKey, JSON.stringify(state.profiles));
-}
-function renderProfileSelect(){
-  const sel = document.getElementById('profile');
-  sel.innerHTML = '';
-  Object.keys(state.profiles).forEach(name=>{
-    const opt = document.createElement('option');
-    opt.value = name; opt.textContent = name;
-    if (name === state.selectedProfile) opt.selected = true;
-    sel.appendChild(opt);
-  });
-}
-document.getElementById('profile').addEventListener('change', (e)=>{
-  state.selectedProfile = e.target.value;
-  refreshLog();
-});
-document.getElementById('newProfile').addEventListener('click', ()=>{
-  const name = prompt('新しいプロフィール名');
-  if (!name) return;
-  if (state.profiles[name]) { alert('既に存在します'); return; }
-  state.profiles[name] = { logs:[], correct:0, total:0 };
-  state.selectedProfile = name;
-  saveProfiles(); renderProfileSelect(); refreshLog();
-});
-document.getElementById('renameProfile').addEventListener('click', ()=>{
-  const old = state.selectedProfile;
-  const name = prompt('新しい名称', old);
-  if (!name || name === old) return;
-  if (state.profiles[name]) { alert('同名が存在します'); return; }
-  state.profiles[name] = state.profiles[old];
-  delete state.profiles[old];
-  state.selectedProfile = name;
-  saveProfiles(); renderProfileSelect(); refreshLog();
-});
-
-/** ============================
- *  画面表示の切替
- *  ============================ */
-function setCompareRowByType(){
-  const type = document.getElementById('type').value;
-  const row = document.getElementById('cmpRow');
-  const unit = document.getElementById('unitHint');
-  if (type === 'fraction_compare') {
-    row.style.display = 'flex';
-    document.getElementById('answer').placeholder = '例: > / < / =（分数の大小）';
-    unit.textContent = '（>, <, = のいずれかで答えます）';
-  } else {
-    row.style.display = 'none';
-    document.getElementById('answer').placeholder = '例: 最大公約数を半角数字で';
-    unit.textContent = '（半角数字で答えます）';
+  function saveProfiles(map) { localStorage.setItem(storeKey, JSON.stringify(map)); }
+  function firstProfileName(map) { return Object.keys(map)[0] || '学習者A'; }
+  function ensureInit() {
+    const map = loadProfiles();
+    if (!Object.keys(map).length) {
+      map['学習者A'] = { log: [] };
+      saveProfiles(map);
+    }
   }
-}
+  ensureInit();
 
-/** ============================
- *  API
- *  ============================ */
-async function fetchNext(){
-  const type = document.getElementById('type').value;
-  const level = document.getElementById('level').value;
+  // ---- 要素参照（IDは既存HTMLに合わせてください）----
+  const $ = (id) => document.getElementById(id);
+  const profileSel = $('profileSel');
+  const newProfileBtn = $('newProfile');
+  const renameBtn = $('renameProfile');
+  const modeSel = $('modeSel');
 
-  setCompareRowByType();
+  const unitSel = $('unit');
+  const diffSel = $('difficulty');
+  const nextBtn = $('next');
+  const qEl = $('question');
+  const ansInput = $('answer');
+  const resultEl = $('result');
+  const submitBtn = $('submit');
 
-  const res = await fetch(`${API}/problems/next?type=${encodeURIComponent(type)}&level=${level}`);
-  current = await res.json();
-  current._start = Date.now();
+  const btnGt = $('btnGt');
+  const btnLt = $('btnLt');
+  const btnEq = $('btnEq');
 
-  document.getElementById('question').textContent = current.render?.stem || '取得失敗';
-  document.getElementById('answer').value = '';
-  document.getElementById('result').textContent = '';
-}
+  const logCard = $('logCard');
+  const toggleLogBtn = $('toggleLog');
+  const logUl = $('log');
+  const statsEl = $('stats');
+  const toggleMsBtn = $('toggleMs');
 
-async function grade(answerText){
-  if (!current) return;
-  try{
-    const res = await fetch(`${API}/grade`, {
-      method: 'POST',
-      headers: { 'Content-Type':'application/json' },
-      body: JSON.stringify({
-        answer: answerText,
-        payload: current.payload,
-        template_id: current.template_id
-      })
-    });
-    const g = await res.json();
+  // ==== 先生ダッシュボード（下部カードの直前に挿入）====
+  const dashCard = document.createElement('div');
+  dashCard.className = 'card section hidden';
+  dashCard.id = 'dashCard';
+  dashCard.innerHTML = `
+    <div class="toolbar">
+      <div class="tiny muted">先生ダッシュボード（この端末に登録されたプロフィールの集計）</div>
+      <div class="right">
+        <button id="exportCsv" class="secondary tiny">CSVエクスポート</button>
+      </div>
+    </div>
+    <div id="dashSummary" class="mono tiny muted" style="margin-top:6px;"></div>
+    <div style="overflow-x:auto; margin-top:8px;">
+      <table id="dashTable" class="mono" style="border-collapse:collapse; width:100%;">
+        <thead>
+          <tr>
+            <th style="border-bottom:1px solid #e5e7eb; text-align:left; padding:4px 6px;">プロフィール</th>
+            <th style="border-bottom:1px solid #e5e7eb; text-align:right; padding:4px 6px;">総問数</th>
+            <th style="border-bottom:1px solid #e5e7eb; text-align:right; padding:4px 6px;">正解</th>
+            <th style="border-bottom:1px solid #e5e7eb; text-align:right; padding:4px 6px;">正答率</th>
+            <th style="border-bottom:1px solid #e5e7eb; text-align:right; padding:4px 6px;">分数の大小</th>
+            <th style="border-bottom:1px solid #e5e7eb; text-align:right; padding:4px 6px;">最大公約数</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>`;
+  // 「プロフィール」カードの直前に追加（最下部にある card.section の直前）
+  const sections = document.querySelectorAll('.card.section');
+  if (sections.length) {
+    sections[sections.length - 1].before(dashCard);
+  }
 
-    // 表示
-    const ms = Date.now() - current._start;
-    const ok = !!g?.correct;
-    document.getElementById('result').innerHTML =
-      ok ? `✅ 正解！` : `❌ 不正解。正答: <span class="mono">${g?.gold || '—'}</span>`;
+  // ---- プロフィールUI ----
+  function refreshProfileUI() {
+    const map = loadProfiles();
+    const cur = localStorage.getItem('nlt-proto:currentProfile') || firstProfileName(map);
+    if (profileSel) {
+      profileSel.innerHTML = '';
+      Object.keys(map).forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name; opt.textContent = name; profileSel.appendChild(opt);
+      });
+      profileSel.value = cur;
+    }
+    localStorage.setItem('nlt-proto:currentProfile', cur);
+    renderLog();
+    renderDashboard();
+  }
 
-    // ログ蓄積
-    const prof = state.profiles[state.selectedProfile];
-    prof.total++; if (ok) prof.correct++;
-    const item = {
-      t: new Date().toISOString(),
-      stem: current.render?.stem || '',
-      ms, ok,
-      gold: g?.gold ?? ''
+  if (newProfileBtn) newProfileBtn.onclick = () => {
+    const name = prompt('新しいプロフィール名');
+    if (!name) return;
+    const map = loadProfiles();
+    if (map[name]) { alert('同名が存在します'); return; }
+    map[name] = { log: [] };
+    saveProfiles(map);
+    localStorage.setItem('nlt-proto:currentProfile', name);
+    refreshProfileUI();
+  };
+
+  if (renameBtn) renameBtn.onclick = () => {
+    const map = loadProfiles();
+    const cur = profileSel.value;
+    const name = prompt('新しい名称', cur);
+    if (!name || name === cur) return;
+    if (map[name]) { alert('同名が存在します'); return; }
+    map[name] = map[cur]; delete map[cur];
+    saveProfiles(map);
+    localStorage.setItem('nlt-proto:currentProfile', name);
+    refreshProfileUI();
+  };
+
+  if (profileSel) profileSel.onchange = () => {
+    localStorage.setItem('nlt-proto:currentProfile', profileSel.value);
+    renderLog(); renderDashboard();
+  };
+
+  // ---- 学習記録表示切替 ----
+  if (toggleLogBtn && logCard) {
+    toggleLogBtn.onclick = () => {
+      logVisible = !logVisible;
+      logCard.classList.toggle('hidden', !logVisible);
+      toggleLogBtn.textContent = logVisible ? '非表示' : '表示';
     };
-    prof.logs.unshift(item);
-    prof.logs = prof.logs.slice(0, 500); // 上限
-    saveProfiles();
-    refreshLog();
-
-    // 次の問題へ
-    current = null;
-
-  } catch(err){
-    console.error(err);
-    alert('採点に失敗しました。通信状況をご確認ください。');
   }
-}
+  if (toggleMsBtn) {
+    toggleMsBtn.onclick = () => {
+      showMs = !showMs;
+      toggleMsBtn.textContent = showMs ? '▼ 詳細（時間ms）を非表示' : '▶ 詳細（時間ms）を表示';
+      renderLog();
+    };
+  }
 
-/** ============================
- *  学習記録
- *  ============================ */
-function refreshLog(){
-  const prof = state.profiles[state.selectedProfile];
-  // 正答率
-  const rate = prof.total ? Math.round((prof.correct / prof.total) * 100) : 0;
-  document.getElementById('rate').textContent = `正答率：${prof.total? rate+'%': 'ー'}`;
+  // ---- 出題取得 ----
+  async function fetchNext() {
+    if (resultEl) resultEl.textContent = '';
+    if (ansInput) ansInput.value = '';
+    const unit = unitSel && unitSel.value === 'gcd' ? 'gcd' : 'fraction';
+    const difficulty = diffSel ? diffSel.value : 'normal';
+    if (qEl) qEl.textContent = '（取得中…）';
+    try {
+      const t0 = performance.now();
+      const res = await fetch(`${API_BASE}/problems/next?unit=${unit}&difficulty=${difficulty}`);
+      const inst = await res.json();
+      current = inst;
+      if (qEl) qEl.textContent = inst.render.stem;
+      current._t = { t0, t1: performance.now() };
+    } catch (e) {
+      if (qEl) qEl.textContent = '問題取得に失敗しました。通信状況をご確認ください。';
+    }
+  }
 
-  // リスト
-  const logEl = document.getElementById('log');
-  logEl.innerHTML = '';
-  prof.logs.forEach(item=>{
-    const li = document.createElement('div');
-    li.innerHTML = `• ${item.ok?'○':'×'} <span class="mono">${escapeHtml(item.stem)}</span>
-      <span class="time muted"> / ${item.ms}ms</span>
-      ${item.ok ? '' : ` / 正答: <span class="mono">${escapeHtml(item.gold)}</span>`}`;
-    logEl.appendChild(li);
-  });
-}
+  // ---- 採点 ----
+  async function grade() {
+    if (!current) return;
+    const answer = ansInput ? ansInput.value.trim() : '';
+    if (!answer) return;
+    const tStart = performance.now();
+    try {
+      const res = await fetch(`${API_BASE}/grade`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template_id: current.template_id, answer, payload: current.payload }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error('採点エラー');
 
-// ms表示のトグル（先生の詳細確認向け）
-document.getElementById('logDetailToggle').addEventListener('click', ()=>{
-  state.showMs = !state.showMs;
-  const on = state.showMs;
-  document.getElementById('logDetailToggle').textContent =
-    (on ? '▼ 詳細（時間ms）を非表示' : '▶ 詳細（時間ms）を表示');
-  document.querySelectorAll('#logCard .time').forEach(el=>{
-    el.style.display = on ? 'inline' : 'none';
-  });
-});
+      // 正答表示
+      if (resultEl) {
+        if (data.correct) {
+          resultEl.textContent = '⭕ 正解！';
+        } else {
+          const expected = data.expected ?? computeExpectedFallback(current);
+          resultEl.textContent = `❌ 不正解。 正答: ${expected}`;
+        }
+      }
 
-/** ============================
- *  ユーティリティ
- *  ============================ */
-function escapeHtml(s){
-  return String(s??'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
-}
+      appendLogEntry(data.correct, tStart, data.expected ?? computeExpectedFallback(current));
+      renderLog(); renderDashboard();
+    } catch (e) {
+      alert('採点に失敗しました。通信状況をご確認ください。');
+    }
+  }
 
-/** ============================
- *  イベント
- *  ============================ */
-document.getElementById('type').addEventListener('change', fetchNext);
-document.getElementById('level').addEventListener('change', fetchNext);
-document.getElementById('next').addEventListener('click', fetchNext);
+  // サーバが古い場合のフォールバック計算
+  function computeExpectedFallback(inst) {
+    if (!inst) return '-';
+    if (inst.template_id === 'math_frac_compare_v1') {
+      const {A,B,C,D} = inst.payload;
+      const lhs = A*D, rhs = C*B;
+      return lhs > rhs ? '>' : lhs < rhs ? '<' : '=';
+    }
+    if (inst.template_id === 'math_gcd_v1') {
+      let {X,Y} = inst.payload;
+      X = Math.abs(X); Y = Math.abs(Y);
+      while (Y) [X,Y] = [Y, X % Y];
+      return String(X);
+    }
+    return '-';
+  }
 
-// 比較ボタン
-document.getElementById('btn_gt').addEventListener('click', ()=>grade('>'));
-document.getElementById('btn_lt').addEventListener('click', ()=>grade('<'));
-document.getElementById('btn_eq').addEventListener('click', ()=>grade('='));
+  function appendLogEntry(correct, tStart, expected) {
+    const map = loadProfiles();
+    const name = localStorage.getItem('nlt-proto:currentProfile') || firstProfileName(map);
+    const rec = map[name] ?? { log: [] };
+    const spentMs = Math.round(performance.now() - tStart);
+    const getMs = current?._t ? Math.round(current._t.t1 - current._t.t0) : null;
+    rec.log.unshift({
+      at: Date.now(),
+      unit: current.meta.unit,
+      diff: current.meta.difficulty,
+      stem: current.render.stem,
+      correct: !!correct,
+      expected: expected ?? null,
+      ms: { fetch: getMs, answer: spentMs }
+    });
+    if (rec.log.length > 200) rec.log.length = 200;
+    map[name] = rec;
+    saveProfiles(map);
+  }
 
-// 手入力採点
-document.getElementById('submit').addEventListener('click', ()=>{
-  const a = document.getElementById('answer').value.trim();
-  if (!a) return;
-  grade(a);
-});
-document.getElementById('answer').addEventListener('keydown',(e)=>{
-  if (e.key==='Enter'){ e.preventDefault(); document.getElementById('submit').click(); }
-});
+  function renderLog() {
+    if (!statsEl || !logUl) return;
+    const map = loadProfiles();
+    const name = localStorage.getItem('nlt-proto:currentProfile') || firstProfileName(map);
+    const rec = map[name] ?? { log: [] };
 
-// 学習記録の表示/非表示トグル
-document.getElementById('toggleLog').addEventListener('click', ()=>{
-  state.showLog = !state.showLog;
-  document.getElementById('logCard').classList.toggle('hide', !state.showLog);
-  document.getElementById('toggleLog').textContent = state.showLog ? '非表示' : '表示';
-});
+    if (!rec.log.length) {
+      statsEl.textContent = '正答率：—';
+    } else {
+      const ok = rec.log.filter(r => r.correct).length;
+      const rate = Math.round((ok / rec.log.length) * 100);
+      statsEl.textContent = `正答率：${rate}%（${ok}/${rec.log.length}）`;
+    }
 
-// モード切替（現時点ではUI配置のみ。将来拡張のフック）
-document.getElementById('mode').addEventListener('change', (e)=>{
-  // 先生モードでも基本UIは同じ。必要に応じてここに“先生だけの機能”を後で生やす。
-});
+    logUl.innerHTML = '';
+    rec.log.forEach(r => {
+      const li = document.createElement('li');
+      const head = (r.correct ? '○' : '×') + ' ' + r.stem;
+      const tailMs = showMs ? ` / 取得:${r.ms.fetch ?? '-'}ms / 解答:${r.ms.answer}ms` : '';
+      const tailAns = r.correct ? '' : ` / 正答: ${r.expected ?? '-'}`;
+      li.textContent = `${head}${tailAns}${tailMs}`;
+      logUl.appendChild(li);
+    });
+  }
 
-/** 初期化 */
-loadProfiles();
-setCompareRowByType();
-refreshLog();
-fetchNext();
+  // ---- 先生ダッシュボード ----
+  function summarize(map) {
+    const rows = [];
+    for (const name of Object.keys(map)) {
+      const logs = map[name].log ?? [];
+      const total = logs.length;
+      const ok = logs.filter(r => r.correct).length;
+      const acc = total ? Math.round((ok/total)*100) : 0;
+      const byUnit = { fraction: {t:0,ok:0}, gcd:{t:0,ok:0} };
+      logs.forEach(r => {
+        if (r.unit === 'fraction') { byUnit.fraction.t++; if (r.correct) byUnit.fraction.ok++; }
+        if (r.unit === 'gcd') { byUnit.gcd.t++; if (r.correct) byUnit.gcd.ok++; }
+      });
+      rows.push({ name, total, ok, acc,
+        frac:`${byUnit.fraction.ok}/${byUnit.fraction.t}`,
+        gcd:`${byUnit.gcd.ok}/${byUnit.gcd.t}` });
+    }
+    return rows;
+  }
+
+  function renderDashboard() {
+    const map = loadProfiles();
+    const rows = summarize(map);
+
+    const tableBody = document.querySelector('#dashTable tbody');
+    const sumEl = document.getElementById('dashSummary');
+    if (!tableBody || !sumEl) return;
+
+    // サマリー
+    const totals = Object.values(map).map(p => p.log?.length ?? 0).reduce((a,b)=>a+b,0);
+    sumEl.textContent = `登録プロファイル: ${Object.keys(map).length} / 記録総数: ${totals}`;
+
+    // 行
+    tableBody.innerHTML = '';
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="border-bottom:1px solid #f3f4f6; padding:4px 6px;">${r.name}</td>
+        <td style="border-bottom:1px solid #f3f4f6; padding:4px 6px; text-align:right;">${r.total}</td>
+        <td style="border-bottom:1px solid #f3f4f6; padding:4px 6px; text-align:right;">${r.ok}</td>
+        <td style="border-bottom:1px solid #f3f4f6; padding:4px 6px; text-align:right;">${r.acc}%</td>
+        <td style="border-bottom:1px solid #f3f4f6; padding:4px 6px; text-align:right;">${r.frac}</td>
+        <td style="border-bottom:1px solid #f3f4f6; padding:4px 6px; text-align:right;">${r.gcd}</td>`;
+      tableBody.appendChild(tr);
+    });
+
+    // CSV
+    const exportBtn = document.getElementById('exportCsv');
+    if (exportBtn) exportBtn.onclick = () => {
+      const header = ['profile','total','correct','accuracy(%)','fraction(ok/total)','gcd(ok/total)'];
+      const lines = [header.join(',')];
+      rows.forEach(r => lines.push([r.name, r.total, r.ok, r.acc, r.frac, r.gcd].join(',')));
+      const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'dashboard.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
+
+    // モードに応じて表示
+    const isTeacher = (modeSel && modeSel.value === 'teacher');
+    dashCard.classList.toggle('hidden', !isTeacher);
+  }
+
+  // モード切替
+  if (modeSel) modeSel.onchange = () => { renderDashboard(); };
+
+  // ボタン
+  if (nextBtn) nextBtn.onclick = fetchNext;
+  if (submitBtn) submitBtn.onclick = grade;
+  if (btnGt) btnGt.onclick = () => { if (ansInput) ansInput.value = '>'; grade(); };
+  if (btnLt) btnLt.onclick = () => { if (ansInput) ansInput.value = '<'; grade(); };
+  if (btnEq) btnEq.onclick = () => { if (ansInput) ansInput.value = '='; grade(); };
+  if (ansInput) ansInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') grade(); });
+
+  // 初期化
+  refreshProfileUI();
+  fetchNext();
+  renderDashboard();
 </script>
 </body>
 </html>

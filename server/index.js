@@ -154,25 +154,38 @@ api.get('/v1/problems/next', (req, res) => {
 // body: { template_id, answer, payload }
 api.post('/v1/grade', (req, res) => {
   const data = req.body;
-  if (!validateGradeInput(data)) {
+
+  // もし Ajv で validateGradeInput を使っている場合は有効化
+  if (typeof validateGradeInput === 'function' && !validateGradeInput(data)) {
     return res.status(400).json({ ok: false, reason: 'invalid-input', errors: validateGradeInput.errors });
   }
-  const { template_id, answer, payload } = data;
 
+  const { template_id, answer, payload } = data;
   let correct = false;
+  let expected;
+
   if (template_id === 'math_frac_compare_v1') {
+    // 分数の大小： A/B と C/D を交差掛け算で比較
     const lhs = payload.A * payload.D;
     const rhs = payload.C * payload.B;
-    const rel = lhs > rhs ? '>' : lhs < rhs ? '<' : '=';
-    correct = (String(answer).trim() === rel);
+    expected = lhs > rhs ? '>' : lhs < rhs ? '<' : '=';
+    correct = (String(answer).trim() === expected);
+
   } else if (template_id === 'math_gcd_v1') {
-    const g = gcd(payload.X, payload.Y);
-    correct = (Number(answer) === g);
+    // 最大公約数
+    const g = (function gcd(x, y) {
+      x = Math.abs(x); y = Math.abs(y);
+      while (y) [x, y] = [y, x % y];
+      return x;
+    })(payload.X, payload.Y);
+    expected = String(g);
+    correct = (String(answer).trim() === expected);
+
   } else {
     return res.status(400).json({ ok: false, reason: 'unknown-template' });
   }
 
-  return res.json({ ok: true, correct });
+  return res.json({ ok: true, correct, expected });
 });
 
 // 404（/api の中だけでハンドリング）
