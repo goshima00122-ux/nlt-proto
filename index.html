@@ -5,21 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>オンライン問題（試作）</title>
 <style>
-  body{font-family:system-ui, -apple-system, "Helvetica Neue", Arial; max-width:760px; margin:24px auto; padding:0 16px; line-height:1.7}
+  body{font-family:system-ui,-apple-system,"Helvetica Neue",Arial; max-width:760px; margin:24px auto; padding:0 16px; line-height:1.7}
   .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
   .card{border:1px solid #e5e7eb; border-radius:14px; padding:16px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.04); margin:12px 0}
   button{padding:10px 16px; border-radius:12px; border:1px solid #d1d5db; background:#111827; color:#fff; cursor:pointer}
   button.secondary{background:#fff; color:#111}
+  select,input{padding:8px 10px; border:1px solid #d1d5db; border-radius:10px}
   .choice{font-size:18px; padding:12px 16px}
   .ok{color:#10b981; font-weight:700}
   .ng{color:#ef4444; font-weight:700}
-  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Courier New",monospace}
-  select,input{padding:8px 10px; border:1px solid #d1d5db; border-radius:10px}
   .hint{color:#6b7280; font-size:13px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Courier New",monospace}
+  .muted{color:#6b7280}
 </style>
 </head>
 <body>
 <h1>オンライン問題（試作）</h1>
+
+<!-- 学習者プロフィール -->
+<div class="card">
+  <div class="row">
+    <label><b>学習者：</b></label>
+    <select id="profile"></select>
+    <button id="addUser" class="secondary">＋ 追加</button>
+    <button id="renameUser" class="secondary">名前変更</button>
+    <button id="deleteUser" class="secondary">削除</button>
+    <span class="muted" id="profileHint">（同じブラウザでも学習者を切替えると正答率や履歴は別々に保存されます）</span>
+  </div>
+</div>
 
 <!-- 単元＋難易度 -->
 <div class="card">
@@ -75,14 +88,97 @@
 
 <!-- ログ -->
 <div class="card">
-  <h3>学習記録</h3>
+  <div class="row">
+    <h3 style="margin:0">学習記録</h3>
+    <label class="row" style="margin-left:auto">
+      <input type="checkbox" id="showMs"> 詳細（時間ms）を表示
+    </label>
+  </div>
   <ul id="log"></ul>
   <!-- 正答率はJSで下に追加します -->
 </div>
 
 <script>
+/* ===== 設定 ===== */
 const API='https://nlt-proto.onrender.com/api/v1';
+const SHOW_MS_DEFAULT=false;     // 初期状態：時間(ms)は非表示
 
+/* ===== プロフィール管理（ローカルのみ） ===== */
+function uid(){ return 'u_' + Math.random().toString(36).slice(2); }
+
+function loadProfiles(){
+  let p = JSON.parse(localStorage.getItem('profiles')||'[]');
+  if(!p.length){ // 初回
+    p = [{id:uid(), name:'ゲスト1'}];
+    localStorage.setItem('profiles', JSON.stringify(p));
+    localStorage.setItem('currentProfile', p[0].id);
+  }
+  return p;
+}
+
+function saveProfiles(arr){ localStorage.setItem('profiles', JSON.stringify(arr)); }
+
+function currentProfileId(){
+  const id = localStorage.getItem('currentProfile');
+  const list = loadProfiles();
+  if(!list.find(x=>x.id===id)){
+    localStorage.setItem('currentProfile', list[0].id);
+    return list[0].id;
+  }
+  return id;
+}
+
+function setCurrentProfile(id){
+  localStorage.setItem('currentProfile', id);
+  renderProfileSelect();
+  applyProfileSettings();
+  renderLog(); // 成績も切替
+}
+
+/* UIへ反映 */
+function renderProfileSelect(){
+  const sel=document.getElementById('profile');
+  const list = loadProfiles();
+  sel.innerHTML='';
+  list.forEach(p=>{
+    const opt=document.createElement('option');
+    opt.value=p.id; opt.textContent=p.name;
+    sel.appendChild(opt);
+  });
+  sel.value = currentProfileId();
+}
+
+/* プロフィール別キー */
+function attemptsKey(){
+  return `attempts:${currentProfileId()}`;
+}
+function settingsKey(){
+  return `settings:${currentProfileId()}`; // 単元/難易度/表示設定
+}
+
+/* ===== 単元・難易度の保存（学習者ごと） ===== */
+function loadSettings(){
+  const s = JSON.parse(localStorage.getItem(settingsKey())||'{}');
+  return {
+    type: s.type ?? 'fraction_compare',
+    level: s.level ?? '2',
+    showMs: s.showMs ?? SHOW_MS_DEFAULT
+  };
+}
+function saveSettings(partial){
+  const cur = loadSettings();
+  const next = {...cur, ...partial};
+  localStorage.setItem(settingsKey(), JSON.stringify(next));
+}
+function applyProfileSettings(){
+  const s=loadSettings();
+  document.getElementById('type').value=s.type;
+  document.getElementById('level').value=s.level;
+  document.getElementById('showMs').checked=s.showMs;
+  setMode(s.type);
+}
+
+/* ===== 出題/採点 共通ユーティリティ ===== */
 let current=null;
 const normalize=s=>(s||'').trim().replace('＞','>').replace('＜','<').replace('＝','=');
 
@@ -107,6 +203,7 @@ async function fetchNext(){
   document.getElementById('num').value = '';
   document.getElementById('result').textContent = '';
   current._start = Date.now();
+  saveSettings({type:t, level:lv}); // 学習者ごとに保存
 }
 
 async function gradeSymbol(sym){
@@ -119,7 +216,6 @@ async function gradeSymbol(sym){
   const out = await res.json();
   showResult(out);
 }
-
 async function gradeNumber(){
   const given = String(document.getElementById('num').value||'').trim();
   const res = await fetch(`${API}/attempts/grade`,{
@@ -134,21 +230,20 @@ async function gradeNumber(){
 function showResult(out){
   const ms = Date.now()-current._start;
   document.getElementById('result').innerHTML = out.correct
-    ? `<span class="ok">正解！</span> (${ms}ms)`
+    ? `<span class="ok">正解！</span>`
     : `<span class="ng">不正解…</span> 正しくは <b>${out.ground_truth}</b>。<br>${out.feedback_short||''}`;
   saveLog(!!out.correct, ms, current.render?.stem || '');
-  renderLog(); // 正答率も中で更新
+  renderLog();
 }
 
 function saveLog(ok,ms,stem){
   const rec={ts:new Date().toISOString(), ok, ms, stem};
-  const arr=JSON.parse(localStorage.getItem('attempts')||'[]');
+  const arr=JSON.parse(localStorage.getItem(attemptsKey())||'[]');
   arr.unshift(rec);
-  localStorage.setItem('attempts', JSON.stringify(arr.slice(0,100)));
+  localStorage.setItem(attemptsKey(), JSON.stringify(arr.slice(0,100)));
 }
 
-function renderStats(){
-  const arr=JSON.parse(localStorage.getItem('attempts')||'[]');
+function renderStats(arr){
   if (!arr.length) return;
   const ok = arr.filter(x=>x.ok).length;
   const rate = Math.round((ok/arr.length)*100);
@@ -163,25 +258,107 @@ function renderStats(){
 }
 
 function renderLog(){
-  const arr=JSON.parse(localStorage.getItem('attempts')||'[]');
+  const arr=JSON.parse(localStorage.getItem(attemptsKey())||'[]');
   const ul=document.getElementById('log'); ul.innerHTML='';
+  const showMs = document.getElementById('showMs').checked;
   arr.forEach(x=>{
     const li=document.createElement('li');
-    li.textContent=`${x.ok?'◯':'×'}  ${x.ms}ms  /  ${x.stem}`;
+    const msPart = showMs ? ` ${x.ms}ms /` : '';
+    li.textContent = `${x.ok?'◯':'×'}${msPart} ${x.stem}`;
     ul.appendChild(li);
   });
-  renderStats();
+  renderStats(arr);
 }
 
+/* ===== キーボード操作（操作性アップ） =====
+   Enter: 採点
+   > < = : そのまま記号解答
+   ↑/↓ : 難易度変更
+*/
+function handleKey(e){
+  const t = document.getElementById('type').value;
+  if(e.key==='Enter'){
+    if(t==='fraction_compare') gradeSymbol(null);
+    else gradeNumber();
+  }
+  if(t==='fraction_compare' && (e.key==='>'||e.key==='<'||e.key==='=')){
+    gradeSymbol(e.key);
+  }
+  if(e.key==='ArrowUp' || e.key==='ArrowDown'){
+    const lvSel=document.getElementById('level');
+    const i=lvSel.selectedIndex + (e.key==='ArrowUp'?-1:+1);
+    if(i>=0 && i<lvSel.options.length){
+      lvSel.selectedIndex=i;
+      saveSettings({level:lvSel.value});
+      fetchNext();
+    }
+  }
+}
+
+/* ===== 初期化 ===== */
 addEventListener('DOMContentLoaded', ()=>{
+  // プロフィールUI
+  renderProfileSelect();
+  document.getElementById('profile').addEventListener('change', (e)=> setCurrentProfile(e.target.value));
+  document.getElementById('addUser').onclick = ()=>{
+    const name = prompt('学習者名を入力してください（例：Aさん）');
+    if(!name) return;
+    const list=loadProfiles();
+    const p={id:uid(), name:name.trim()};
+    list.push(p); saveProfiles(list); setCurrentProfile(p.id);
+  };
+  document.getElementById('renameUser').onclick = ()=>{
+    const list=loadProfiles();
+    const id=currentProfileId();
+    const me=list.find(x=>x.id===id);
+    const name=prompt('新しい名前', me?.name||'');
+    if(!name) return;
+    me.name=name.trim(); saveProfiles(list); renderProfileSelect();
+  };
+  document.getElementById('deleteUser').onclick = ()=>{
+    const list=loadProfiles();
+    if(list.length<=1){ alert('少なくとも1人は必要です'); return; }
+    const id=currentProfileId();
+    const me=list.find(x=>x.id===id);
+    if(!confirm(`「${me.name}」を削除します。履歴も消えます。よろしいですか？`)) return;
+    // 履歴/設定も削除
+    localStorage.removeItem(attemptsKey());
+    localStorage.removeItem(settingsKey());
+    const remain=list.filter(x=>x.id!==id);
+    saveProfiles(remain);
+    localStorage.setItem('currentProfile', remain[0].id);
+    renderProfileSelect(); applyProfileSettings(); renderLog();
+  };
+
+  // 単元・難易度
+  applyProfileSettings();
+  document.getElementById('type').addEventListener('change', ()=>{
+    setMode(document.getElementById('type').value);
+    saveSettings({type:document.getElementById('type').value});
+    fetchNext();
+  });
+  document.getElementById('level').addEventListener('change', ()=>{
+    saveSettings({level:document.getElementById('level').value});
+    fetchNext();
+  });
+
+  // 採点/問題取得
   document.getElementById('next').onclick = fetchNext;
   document.getElementById('submit').onclick = ()=>gradeSymbol(null);
   document.getElementById('submit-num').onclick = gradeNumber;
   document.querySelectorAll('#choices .choice').forEach(b=>b.onclick=()=>gradeSymbol(b.dataset.v));
-  // 単元切替時もUIを合わせる
-  document.getElementById('type').addEventListener('change', fetchNext);
-  document.getElementById('level').addEventListener('change', fetchNext);
 
+  // 詳細表示（ms）
+  document.getElementById('showMs').checked = loadSettings().showMs;
+  document.getElementById('showMs').addEventListener('change', (e)=>{
+    saveSettings({showMs:e.target.checked});
+    renderLog();
+  });
+
+  // キーボード
+  window.addEventListener('keydown', handleKey);
+
+  // 初回
   fetchNext();
   renderLog();
 });
