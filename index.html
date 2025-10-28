@@ -1,82 +1,129 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>分数の大小（API接続版）</title>
-  <style>
-    body{font-family: system-ui; max-width:760px; margin:24px auto; padding:0 16px; line-height:1.7}
-    .card{border:1px solid #e5e7eb; border-radius:14px; padding:16px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.04); margin:12px 0}
-    button{padding:10px 16px; border-radius:12px; border:1px solid #d1d5db; background:#111827; color:#fff; cursor:pointer}
-    button.secondary{background:#fff; color:#111}
-    .ok{color:#10b981; font-weight:700} .ng{color:#ef4444; font-weight:700}
-    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace}
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>オンライン問題（試作）</title>
+<style>
+  body{font-family:system-ui;max-width:760px;margin:24px auto;padding:0 16px;line-height:1.7}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .card{border:1px solid #e5e7eb;border-radius:14px;padding:16px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04);margin:12px 0}
+  button{padding:10px 16px;border-radius:12px;border:1px solid #d1d5db;background:#111827;color:#fff;cursor:pointer}
+  button.secondary{background:#fff;color:#111}
+  .choice{font-size:18px;padding:12px 16px}
+  .ok{color:#10b981;font-weight:700}.ng{color:#ef4444;font-weight:700}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Courier New",monospace}
+  select,input{padding:8px 10px;border:1px solid #d1d5db;border-radius:10px}
+  .hint{color:#6b7280;font-size:13px}
+</style>
 </head>
 <body>
-  <h1>分数の大小（API接続版）</h1>
+<h1>オンライン問題（試作）</h1>
 
-  <div class="card">
-    <div id="question" class="mono">問題を取得中…</div>
-    <div class="help">(>, &lt;, = のいずれかで答えてください。全角の「＞」「＜」でもOK)</div>
+<div class="card">
+  <div class="row">
+    <label><b>単元：</b></label>
+    <select id="type">
+      <option value="fraction_compare">分数の大小</option>
+      <option value="gcd">最大公約数</option>
+    </select>
+    <button id="next" class="secondary">次の問題</button>
   </div>
+</div>
 
-  <div class="card">
+<div class="card">
+  <div id="question" class="mono">問題を取得中…</div>
+  <div id="helper" class="hint"></div>
+</div>
+
+<div class="card" id="answer-card">
+  <!-- 文字入力（分数用） -->
+  <div id="text-answer" style="display:none">
     <label>答え（>, <, =）</label>
-    <input id="answer" placeholder=", 例: > または ＝" />
-    <div style="margin-top:12px">
-      <button id="submit">採点</button>
-      <button id="next" class="secondary">次の問題</button>
-    </div>
-    <div id="result" style="margin-top:10px"></div>
+    <input id="answer" placeholder="例: > または ＝"/>
+    <button id="submit">採点</button>
   </div>
 
-  <div class="card"><h3>学習記録</h3><ul id="log"></ul></div>
+  <!-- 3ボタン選択（分数用） -->
+  <div id="choices" class="row" style="gap:10px;margin-top:8px;">
+    <button class="choice" data-v=">">＞</button>
+    <button class="choice" data-v="<">＜</button>
+    <button class="choice" data-v="=">＝</button>
+  </div>
+
+  <!-- 数字入力（gcd用） -->
+  <div id="numeric-answer" style="display:none;margin-top:8px;">
+    <label>答え（半角数字）</label>
+    <input id="num" inputmode="numeric" pattern="[0-9]*"/>
+    <button id="submit-num">採点</button>
+  </div>
+
+  <div id="result" style="margin-top:10px"></div>
+</div>
+
+<div class="card"><h3>学習記録</h3><ul id="log"></ul></div>
 
 <script>
-const API = 'https://nlt-proto.onrender.com/api/v1'; // ← あなたのRender URLに合わせる
+const API='https://nlt-proto.onrender.com/api/v1';
 
-let current = null;
-function normalize(s){return (s||'').trim().replace('＞','>').replace('＜','<');}
+let current=null;
+const normalize=s=>(s||'').trim().replace('＞','>').replace('＜','<').replace('＝','=');
 
-async function fetchNext(){
-  const res = await fetch(`${API}/problems/next`);
-  current = await res.json();
-  document.getElementById('question').textContent = current.render.stem;
-  document.getElementById('answer').value = '';
-  document.getElementById('result').textContent = '';
-  current._start = Date.now();
+function setMode(type){
+  const isFrac=(type==='fraction_compare');
+  document.getElementById('helper').textContent=isFrac ? '(>, <, = のいずれかで答えます。全角でもOK)' : '(半角数字で答えます)';
+  document.getElementById('choices').style.display=isFrac?'':'none';
+  document.getElementById('text-answer').style.display=isFrac?'':'none';
+  document.getElementById('numeric-answer').style.display=isFrac?'none':'';
 }
 
-async function grade(){
-  const given = normalize(document.getElementById('answer').value);
-  const res = await fetch(`${API}/attempts/grade`,{
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ answer: given, payload: current.payload })
-  });
-  const out = await res.json();
-  const ms = Date.now()-current._start;
-  document.getElementById('result').innerHTML = out.correct
-    ? `<span class="ok">正解！</span> (${ms}ms)`
-    : `<span class="ng">不正解…</span> 正しくは <b>${out.ground_truth}</b>。<br>${out.feedback_short}`;
-  saveLog(out.correct, ms, current.render.stem);
+async function fetchNext(){
+  const t=document.getElementById('type').value;
+  setMode(t);
+  const res=await fetch(`${API}/problems/next?type=${encodeURIComponent(t)}`);
+  current=await res.json();
+  document.getElementById('question').textContent=current.render?.stem||'取得失敗';
+  document.getElementById('answer').value='';
+  document.getElementById('num').value='';
+  document.getElementById('result').textContent='';
+  current._start=Date.now();
+}
+
+async function gradeSymbol(sym){
+  const given=normalize(sym ?? document.getElementById('answer').value);
+  const res=await fetch(`${API}/attempts/grade`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answer:given,payload:current.payload})});
+  const out=await res.json(); showResult(out);
+}
+
+async function gradeNumber(){
+  const given=String(document.getElementById('num').value||'').trim();
+  const res=await fetch(`${API}/attempts/grade`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answer:given,payload:current.payload})});
+  const out=await res.json(); showResult(out);
+}
+
+function showResult(out){
+  const ms=Date.now()-current._start;
+  document.getElementById('result').innerHTML=out.correct?`<span class="ok">正解！</span> (${ms}ms)`: `<span class="ng">不正解…</span> 正しくは <b>${out.ground_truth}</b>。<br>${out.feedback_short||''}`;
+  saveLog(!!out.correct,ms,current.render?.stem||'');
   renderLog();
 }
 
-function saveLog(ok, ms, stem){
-  const rec = { ts:new Date().toISOString(), ok, ms, stem };
-  const arr = JSON.parse(localStorage.getItem('attempts')||'[]');
-  arr.unshift(rec); localStorage.setItem('attempts', JSON.stringify(arr.slice(0,50)));
+function saveLog(ok,ms,stem){
+  const rec={ts:new Date().toISOString(),ok,ms,stem};
+  const arr=JSON.parse(localStorage.getItem('attempts')||'[]');
+  arr.unshift(rec); localStorage.setItem('attempts',JSON.stringify(arr.slice(0,100)));
 }
 function renderLog(){
-  const arr = JSON.parse(localStorage.getItem('attempts')||'[]');
-  const ul = document.getElementById('log'); ul.innerHTML='';
-  arr.forEach(x=>{ const li=document.createElement('li'); li.textContent = `${x.ok?'◯':'×'}  ${x.ms}ms  /  ${x.stem}`; ul.appendChild(li); });
+  const arr=JSON.parse(localStorage.getItem('attempts')||'[]');
+  const ul=document.getElementById('log'); ul.innerHTML='';
+  arr.forEach(x=>{const li=document.createElement('li'); li.textContent=`${x.ok?'◯':'×'}  ${x.ms}ms  /  ${x.stem}`; ul.appendChild(li);});
 }
 
-addEventListener('DOMContentLoaded', ()=>{
-  document.getElementById('submit').onclick = grade;
-  document.getElementById('next').onclick = fetchNext;
+addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('next').onclick=fetchNext;
+  document.getElementById('submit').onclick=()=>gradeSymbol(null);
+  document.getElementById('submit-num').onclick=gradeNumber;
+  document.querySelectorAll('#choices .choice').forEach(b=>b.onclick=()=>gradeSymbol(b.dataset.v));
   fetchNext(); renderLog();
 });
 </script>
