@@ -1,187 +1,193 @@
 // server/index.js
+// Node: v22 / Express v5 で動作確認
 const express = require('express');
 const cors = require('cors');
 const Ajv = require('ajv');
 
-const app = express();
-const PORT = process.env.PORT || 10000;
-
-// ---- CORS 設定（許可するオリジンを列挙）----
-const allowlist = [
-  'https://nlt-proto.vercel.app',
-  'http://localhost:5173',
-  'http://localhost:3000'
-];
+// --- CORS 設定（必要に応じて許可ドメインを限定） ---
 const corsOptions = {
-  origin(origin, cb) {
-    // ローカルのcurl/サーバ内など origin がないケースも許可
-    if (!origin) return cb(null, true);
-    cb(null, allowlist.includes(origin));
-  }
+  origin: [
+    // フロント（Vercel）ドメインを許可
+    'https://nlt-proto.vercel.app',
+    // localhost 開発時
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+  ],
+  credentials: false,
 };
-// 先に JSON パース
-app.use(express.json());
 
-+ // /api 以下専用のルーター
-+ const api = express.Router();
-+ // /api のプリフライト（OPTIONS）は正規表現で受ける
-+ app.options(/\/api\/.*/, cors(corsOptions));
-+ // /api 本体の CORS
-+ app.use('/api', cors(corsOptions));
-
-// ---- バリデーション（以前の validate.js を1ファイルにまとめ）----
+// --- AJV 準備（厳格モード回避＆Union許可） ---
 const ajv = new Ajv({ allErrors: true, allowUnionTypes: true, strict: false });
 
+// ------ バリデーションスキーマ ------
+// 出題インスタンス（分数/最大公約数いずれも受けるために oneOf）
 const fractionPayloadSchema = {
   type: 'object',
-  properties: {
-    A: { type: 'integer' },
-    B: { type: 'integer' },
-    C: { type: 'integer' },
-    D: { type: 'integer' }
-  },
+  properties: { A: { type: 'integer' }, B: { type: 'integer' }, C: { type: 'integer' }, D: { type: 'integer' } },
   required: ['A', 'B', 'C', 'D'],
-  additionalProperties: false
+  additionalProperties: false,
 };
 
 const gcdPayloadSchema = {
   type: 'object',
-  properties: {
-    X: { type: 'integer' },
-    Y: { type: 'integer' }
-  },
+  properties: { X: { type: 'integer' }, Y: { type: 'integer' } },
   required: ['X', 'Y'],
-  additionalProperties: false
+  additionalProperties: false,
 };
 
 const instanceSchema = {
   type: 'object',
   properties: {
     instance_id: { type: 'string' },
-    template_id: { type: 'string' },
+    template_id: { type: 'string' }, // 'math_frac_compare_v1' | 'math_gcd_v1'
     render: {
       type: 'object',
       properties: {
-        stem: { type: 'string', minLength: 3 },
-        inputs: { type: 'array', minItems: 1 }
+        stem: { type: 'string', minLength: 1 },
+        inputs: { type: 'array' }, // 将来拡張
       },
-      required: ['stem', 'inputs'],
-      additionalProperties: true
+      required: ['stem'],
+      additionalProperties: true,
     },
     meta: { type: 'object' },
-    // payload は分数 or GCD のどちらか
     payload: {
-      oneOf: [fractionPayloadSchema, gcdPayloadSchema]
-    }
+      oneOf: [fractionPayloadSchema, gcdPayloadSchema],
+    },
   },
   required: ['instance_id', 'template_id', 'render', 'payload'],
-  additionalProperties: true
+  additionalProperties: true,
 };
 
 const gradeInputSchema = {
   type: 'object',
   properties: {
     answer: { type: ['string', 'number'] },
-    payload: { oneOf: [fractionPayloadSchema, gcdPayloadSchema] }
+    payload: { oneOf: [fractionPayloadSchema, gcdPayloadSchema] },
+    template_id: { type: 'string' },
   },
-  required: ['answer', 'payload'],
-  additionalProperties: false
+  required: ['answer', 'payload', 'template_id'],
+  additionalProperties: false,
 };
 
 const validateInstance = ajv.compile(instanceSchema);
 const validateGradeInput = ajv.compile(gradeInputSchema);
 
-// ---- ユーティリティ ----
-function randInt(min, max) {
+// ------ ユーティリティ（問題生成など） ------
+function randint(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
+
+function genFraction(difficulty = 'normal') {
+  // 難易度に応じて範囲を変える
+  const range = difficulty === 'easy' ? 7 : difficulty === 'hard' ? 19 : 11;
+  let A = randint(1, range);
+  let B = randint(2, range + 1);
+  let C = randint(1, range);
+  let D = randint(2, range + 1);
+  // 同値ばかりだと退屈なので少し調整
+  if (A * D === C * B) A += 1;
+  return { A, B, C, D };
+}
+
+function genGcd(difficulty = 'normal') {
+  const range = difficulty === 'easy' ? 30 : difficulty === 'hard' ? 120 : 60;
+  let X = randint(10, range);
+  let Y = randint(10, range);
+  if (X === Y) X += 1;
+  return { X, Y };
+}
+
 function gcd(a, b) {
   a = Math.abs(a); b = Math.abs(b);
   while (b) [a, b] = [b, a % b];
   return a;
 }
 
-// ---- 出題 API ----
-// 例：/api/v1/problems/next?unit=fraction&difficulty=normal
+// ------ アプリ起動 ------
+const app = express();
+// 先に JSON パーサ
+app.use(express.json());
+
+// /api 全体に CORS（OPTIONS も自動処理）
+app.use('/api', cors(corsOptions));
+
+// API ルーター
+const api = express.Router();
+
+// GET /api/v1/problems/next?unit=fraction|gcd&difficulty=easy|normal|hard
 api.get('/v1/problems/next', (req, res) => {
-  const unit = String(req.query.unit || 'fraction');   // 'fraction' or 'gcd'
-  const difficulty = String(req.query.difficulty || 'normal');
+  const unit = (req.query.unit || 'fraction').toString(); // 'fraction' | 'gcd'
+  const difficulty = (req.query.difficulty || 'normal').toString(); // 'easy'|'normal'|'hard'
 
   let instance;
   if (unit === 'gcd') {
-    // 最大公約数
-    const X = randInt(12, 99);
-    const Y = randInt(12, 99);
+    const payload = genGcd(difficulty);
     instance = {
-      instance_id: `g_${Date.now()}`,
+      instance_id: cryptoRandomId(),
       template_id: 'math_gcd_v1',
       render: {
-        stem: `${X} と ${Y} の最大公約数を答えよ（半角数字）`,
-        inputs: [{ type: 'text', name: 'gcd' }]
+        stem: `${payload.X} と ${payload.Y} の最大公約数を答えよ（半角数字）`,
       },
-      meta: { subject: 'math', unit, difficulty },
-      payload: { X, Y }
+      meta: { subject: 'math', unit: 'gcd', difficulty },
+      payload,
     };
   } else {
-    // 分数の大小
-    const A = randInt(1, 9), B = randInt(2, 9);
-    const C = randInt(1, 9), D = randInt(2, 9);
+    const payload = genFraction(difficulty);
     instance = {
-      instance_id: `f_${Date.now()}`,
+      instance_id: cryptoRandomId(),
       template_id: 'math_frac_compare_v1',
       render: {
-        stem: `次の分数を通分して(>,<,=)で答えよ： ${A}/${B} と ${C}/${D}`,
-        inputs: [{ type: 'text', name: 'rel' }]
+        stem: `次の分数を通分して(>,<,=)で答えよ： ${payload.A}/${payload.B} と ${payload.C}/${payload.D}`,
       },
       meta: { subject: 'math', unit: 'fraction', difficulty },
-      payload: { A, B, C, D }
+      payload,
     };
   }
 
   if (!validateInstance(instance)) {
-    return res.status(500).json({ error: 'invalid_instance', detail: validateInstance.errors });
+    return res.status(500).json({ error: 'instance invalid', details: validateInstance.errors });
   }
-  res.json(instance);
+  return res.json(instance);
 });
 
-// ---- 採点 API ----
+// POST /api/v1/grade
+// body: { template_id, answer, payload }
 api.post('/v1/grade', (req, res) => {
-  const body = req.body;
-  if (!validateGradeInput(body)) {
-    return res.status(400).json({ ok: false, error: 'bad_request', detail: validateGradeInput.errors });
+  const data = req.body;
+  if (!validateGradeInput(data)) {
+    return res.status(400).json({ ok: false, reason: 'invalid-input', errors: validateGradeInput.errors });
+  }
+  const { template_id, answer, payload } = data;
+
+  let correct = false;
+  if (template_id === 'math_frac_compare_v1') {
+    const lhs = payload.A * payload.D;
+    const rhs = payload.C * payload.B;
+    const rel = lhs > rhs ? '>' : lhs < rhs ? '<' : '=';
+    correct = (String(answer).trim() === rel);
+  } else if (template_id === 'math_gcd_v1') {
+    const g = gcd(payload.X, payload.Y);
+    correct = (Number(answer) === g);
+  } else {
+    return res.status(400).json({ ok: false, reason: 'unknown-template' });
   }
 
-  const { answer, payload } = body;
-
-  // GCD のとき
-  if (payload && typeof payload.X === 'number' && typeof payload.Y === 'number') {
-    const correct = gcd(payload.X, payload.Y);
-    const ok = String(answer).trim() === String(correct);
-    return res.json({ ok, correct, feedback: ok ? '正解！' : `正解は ${correct}` });
-  }
-
-  // 分数比較のとき
-  const { A, B, C, D } = payload;
-  const left = A / B;
-  const right = C / D;
-  const rel = left > right ? '>' : left < right ? '<' : '=';
-
-  const user = String(answer).trim();
-  const ok = user === rel;
-  res.json({ ok, correct: rel, feedback: ok ? '正解！' : `正解は「${rel}」` });
+  return res.json({ ok: true, correct });
 });
 
-// ルーターを /api にマウント（★ /api/* を使わない）
+// 404（/api の中だけでハンドリング）
+api.use((req, res) => res.status(404).json({ error: 'not found' }));
+
+// ルーターを /api にぶら下げ（CORS の後）
 app.use('/api', api);
 
-// 簡単なヘルスチェック
-app.get('/', (_req, res) => res.send('API ready'));
-
-app.use((err, _req, res, _next) => {
-  console.error(err);
-  res.status(500).json({ error: 'internal_error' });
-});
-
+// ポートは Render が PORT を渡す：なければローカル 10000
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`API ready: http://localhost:${PORT}`);
 });
+
+// ランダムID（簡易）
+function cryptoRandomId() {
+  return 'q_' + Math.random().toString(36).slice(2, 10);
+}
