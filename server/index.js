@@ -22,12 +22,12 @@ const corsOptions = {
 // 先に JSON パース
 app.use(express.json());
 
-// プリフライト：ワイルドカードは使わず「全体」でも OK
-app.options('*', cors(corsOptions));
-
-// /api 以下専用のルーターを作ってマウント（★ /api/* を使わない）
-const api = express.Router();
-api.use(cors(corsOptions));
++ // /api 以下専用のルーター
++ const api = express.Router();
++ // /api のプリフライト（OPTIONS）は正規表現で受ける
++ app.options(/\/api\/.*/, cors(corsOptions));
++ // /api 本体の CORS
++ app.use('/api', cors(corsOptions));
 
 // ---- バリデーション（以前の validate.js を1ファイルにまとめ）----
 const ajv = new Ajv({ allErrors: true, allowUnionTypes: true, strict: false });
